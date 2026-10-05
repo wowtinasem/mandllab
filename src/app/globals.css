@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
-:root {
+/* 화면 테마: 라이트(기본) · 다크 · 그린. <html data-theme="..."> 로 고르고,
+   고르지 않았으면 기기 설정(라이트/다크)을 따른다. */
+:root,
+:root[data-theme="light"] {
   --bg: #f5f6fa;
   --surface: #ffffff;
   --surface-2: #eef0f6;
@@ -20,7 +23,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #0f1117;
     --surface: #171a23;
     --surface-2: #20242f;
@@ -38,6 +41,44 @@
     --danger-soft: #331617;
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1117;
+  --surface: #171a23;
+  --surface-2: #20242f;
+  --border: #2d3240;
+  --text: #eceef4;
+  --muted: #9aa1b5;
+  --accent: #8b80ff;
+  --accent-soft: #262245;
+  --accent-fg: #0f1117;
+  --ok: #4cc38a;
+  --ok-soft: #12291d;
+  --warn: #f1b44c;
+  --warn-soft: #2e2410;
+  --danger: #ff6b6b;
+  --danger-soft: #331617;
+  color-scheme: dark;
+}
+
+:root[data-theme="green"] {
+  --bg: #eef6f0;
+  --surface: #ffffff;
+  --surface-2: #e1efe5;
+  --border: #c9e0d0;
+  --text: #11281a;
+  --muted: #4b6655;
+  --accent: #17804a;
+  --accent-soft: #d9f0e2;
+  --accent-fg: #ffffff;
+  --ok: #17804a;
+  --ok-soft: #dff3e7;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d3;
+  --danger: #c4282d;
+  --danger-soft: #fde6e5;
+  color-scheme: light;
 }
 
 @theme inline {

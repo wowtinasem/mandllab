@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import Logo from "@/components/Logo";
+import ThemePicker from "@/components/ThemePicker";
 
 type Step = "code" | "name" | "saved" | "rejoin";
 
@@ -70,9 +71,12 @@ export default function Home() {
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-6 sm:px-6">
       <header className="flex items-center justify-between">
         <Logo />
-        <Link href="/teacher" className="text-sm font-medium text-muted hover:text-accent">
-          강사 화면 →
-        </Link>
+        <div className="flex items-center gap-3">
+          <ThemePicker compact />
+          <Link href="/teacher" className="text-sm font-medium text-muted hover:text-accent">
+            강사 화면 →
+          </Link>
+        </div>
       </header>
 
       <section className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1.1fr_1fr]">

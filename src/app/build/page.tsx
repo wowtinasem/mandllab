@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Logo from "@/components/Logo";
 import Preview from "@/components/Preview";
+import ThemePicker from "@/components/ThemePicker";
 import { SplitHandle, useResizable } from "@/components/useResizable";
 import { PlanQuestionCard, PlanSpecCard, toPlanHistory, type PlanTurn } from "@/components/PlanCards";
 import { ApiError, api, formatDateTime, streamGenerate } from "@/lib/client";
@@ -261,8 +262,9 @@ export default function Builder() {
             데모 모드
           </span>
         )}
+        <ThemePicker compact />
         <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+          className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
             me.remaining <= 3 ? "bg-danger-soft text-danger" : "bg-surface-2 text-ink"
           }`}
         >
