@@ -8,7 +8,7 @@ import { api, formatDateTime } from "@/lib/client";
 import type { Instructor, Session } from "@/lib/types";
 
 type SessionRow = Session & { participantCount: number; costUsd: number };
-type MeResp = { instructor: Instructor | null; mockMode: boolean; inviteRequired: boolean };
+type MeResp = { instructor: Instructor | null; mockMode: boolean; dbMissing: boolean; inviteRequired: boolean };
 
 export default function TeacherHome() {
   const [me, setMe] = useState<MeResp | null>(null);
@@ -19,7 +19,7 @@ export default function TeacherHome() {
 
   if (!me) return <div className="grid min-h-screen place-items-center text-muted">불러오는 중…</div>;
   if (!me.instructor) return <AuthForm inviteRequired={me.inviteRequired} onDone={load} />;
-  return <SessionList instructor={me.instructor} mockMode={me.mockMode} onLogout={load} />;
+  return <SessionList instructor={me.instructor} mockMode={me.mockMode} dbMissing={me.dbMissing} onLogout={load} />;
 }
 
 function AuthForm({ inviteRequired, onDone }: { inviteRequired: boolean; onDone: () => void }) {
@@ -104,7 +104,17 @@ const STATUS_LABEL: Record<Session["status"], [string, string]> = {
   expired: ["만료·삭제됨", "bg-surface-2 text-muted"],
 };
 
-function SessionList({ instructor, mockMode, onLogout }: { instructor: Instructor; mockMode: boolean; onLogout: () => void }) {
+function SessionList({
+  instructor,
+  mockMode,
+  dbMissing,
+  onLogout,
+}: {
+  instructor: Instructor;
+  mockMode: boolean;
+  dbMissing: boolean;
+  onLogout: () => void;
+}) {
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [form, setForm] = useState({ title: "", perLimit: 30, costCapUsd: 20, capacity: 45, durationMin: 180 });
   const [creating, setCreating] = useState(false);
@@ -151,6 +161,12 @@ function SessionList({ instructor, mockMode, onLogout }: { instructor: Instructo
           </button>
         </div>
       </header>
+
+      {dbMissing && (
+        <div className="mt-6 rounded-xl bg-danger-soft p-4 text-sm text-danger">
+          <b>데이터베이스가 연결되지 않았어요.</b> 배포 서버에 Turso가 연결되기 전까지는 수업을 만들 수 없어요. 연결 전에 만든 수업은 사라지고 참여자 입장이 실패해요.
+        </div>
+      )}
 
       {mockMode && (
         <div className="mt-6 rounded-xl bg-warn-soft p-4 text-sm text-warn">

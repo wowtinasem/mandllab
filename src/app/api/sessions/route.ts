@@ -1,5 +1,5 @@
 import { currentInstructor, newId } from "@/lib/auth";
-import { db, now } from "@/lib/db";
+import { db, isEphemeralDb, now } from "@/lib/db";
 import { bad, clampInt, readJson, str } from "@/lib/http";
 import { issueSessionCode, refreshSession } from "@/lib/sessions";
 
@@ -27,6 +27,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const me = await currentInstructor();
   if (!me) return bad("로그인이 필요해요.", 401);
+  if (isEphemeralDb())
+    return bad("데이터베이스(Turso)가 아직 연결되지 않아 수업을 만들 수 없어요. 연결 전에는 수업이 사라지고 입장이 실패해요.", 503);
   const b = await readJson<{ title: string; perLimit: number; costCapUsd: number; capacity: number; durationMin: number }>(req);
   const title = str(b.title, 60);
   if (!title) return bad("수업 이름을 입력해 주세요.");

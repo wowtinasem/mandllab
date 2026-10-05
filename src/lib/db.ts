@@ -185,3 +185,6 @@ export async function batch(statements: { sql: string; args?: Arg[] }[]) {
 }
 
 export const now = () => Date.now();
+
+/** Vercel 에서 Turso 없이 /tmp 로 돌고 있으면 true. 이때는 수업을 만들지 못하게 막는다. */
+export const isEphemeralDb = () => Boolean(process.env.VERCEL) && !(process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL);
