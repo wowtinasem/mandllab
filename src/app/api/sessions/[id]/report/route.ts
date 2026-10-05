@@ -12,7 +12,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/sessions/[id]/r
   if (!owned) return bad("세션을 찾을 수 없어요.", 404);
   const { session, instructor } = owned;
 
-  const rows = db()
+  const rows = await db()
     .prepare(
       `SELECT COALESCE(p.nickname, '(삭제된 참여자)') AS nickname, u.model,
               COUNT(*) AS calls, SUM(u.input_tokens) AS input, SUM(u.output_tokens) AS output, SUM(u.cost_usd) AS cost

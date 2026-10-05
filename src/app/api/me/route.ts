@@ -9,10 +9,10 @@ export async function GET() {
   const me = await currentParticipant();
   if (!me) return bad("입장 정보가 없어요.", 401);
   const { participant: p, session: s } = me;
-  const versions = db()
+  const versions = await db()
     .prepare("SELECT id, n, title, summary, prompt, created_at FROM versions WHERE participant_id = ? ORDER BY n")
     .all(p.id);
-  const inGallery = db().prepare("SELECT version_id FROM gallery WHERE participant_id = ?").all(p.id) as { version_id: string }[];
+  const inGallery = await db().prepare("SELECT version_id FROM gallery WHERE participant_id = ?").all(p.id) as { version_id: string }[];
   return Response.json({
     nickname: p.nickname,
     remaining: Math.max(0, s.per_limit - p.request_count),

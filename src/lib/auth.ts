@@ -36,7 +36,7 @@ const cookieBase = {
 
 export async function startInstructorSession(instructorId: string) {
   const token = randomToken();
-  db()
+  await db()
     .prepare("INSERT INTO instructor_tokens (token_hash, instructor_id, expires_at) VALUES (?, ?, ?)")
     .run(sha256(token), instructorId, now() + INSTRUCTOR_TTL_MS);
   (await cookies()).set(INSTRUCTOR_COOKIE, token, { ...cookieBase, maxAge: INSTRUCTOR_TTL_MS / 1000 });
@@ -45,14 +45,14 @@ export async function startInstructorSession(instructorId: string) {
 export async function endInstructorSession() {
   const store = await cookies();
   const token = store.get(INSTRUCTOR_COOKIE)?.value;
-  if (token) db().prepare("DELETE FROM instructor_tokens WHERE token_hash = ?").run(sha256(token));
+  if (token) await db().prepare("DELETE FROM instructor_tokens WHERE token_hash = ?").run(sha256(token));
   store.delete(INSTRUCTOR_COOKIE);
 }
 
 export async function currentInstructor(): Promise<Instructor | null> {
   const token = (await cookies()).get(INSTRUCTOR_COOKIE)?.value;
   if (!token) return null;
-  const row = db()
+  const row = await db()
     .prepare(
       `SELECT i.id, i.email, i.name, i.org FROM instructor_tokens t
        JOIN instructors i ON i.id = t.instructor_id
@@ -66,7 +66,7 @@ export async function currentInstructor(): Promise<Instructor | null> {
 export async function ownedSession(sessionId: string): Promise<{ instructor: Instructor; session: Session } | null> {
   const instructor = await currentInstructor();
   if (!instructor) return null;
-  const session = refreshSession(sessionId);
+  const session = await refreshSession(sessionId);
   if (!session || session.instructor_id !== instructor.id) return null;
   return { instructor, session };
 }
@@ -78,11 +78,11 @@ export async function setParticipantCookie(token: string) {
 export async function currentParticipant(): Promise<{ participant: Participant; session: Session } | null> {
   const token = (await cookies()).get(PARTICIPANT_COOKIE)?.value;
   if (!token) return null;
-  const participant = db().prepare("SELECT * FROM participants WHERE token_hash = ?").get(sha256(token)) as
+  const participant = await db().prepare("SELECT * FROM participants WHERE token_hash = ?").get(sha256(token)) as
     | Participant
     | undefined;
   if (!participant) return null;
-  const session = refreshSession(participant.session_id);
+  const session = await refreshSession(participant.session_id);
   if (!session || session.status === "expired") return null;
   return { participant, session };
 }

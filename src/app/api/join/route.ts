@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   if (joinRateLimited(ip)) return bad("입장 시도가 너무 많아요. 1분 뒤 다시 시도해 주세요.", 429);
   const b = await readJson<{ code: string; nickname: string; agree: boolean }>(req);
 
-  const session = findSessionByCode(str(b.code, 20));
+  const session = await findSessionByCode(str(b.code, 20));
   if (!session || session.status === "expired") {
     recordFailedAttempt(ip);
     return bad("강의 코드를 다시 확인해 주세요.", 404);
@@ -21,13 +21,13 @@ export async function POST(req: Request) {
   if (!base) return bad("이름이나 별명을 입력해 주세요.");
 
   const conn = db();
-  const { n } = conn.prepare("SELECT COUNT(*) AS n FROM participants WHERE session_id = ?").get(session.id) as { n: number };
+  const { n } = await conn.prepare("SELECT COUNT(*) AS n FROM participants WHERE session_id = ?").get(session.id) as { n: number };
   if (n >= session.capacity) return bad("정원이 다 찼어요. 강사에게 알려 주세요.", 409);
 
   // 같은 별명이 있으면 (2), (3)… 을 붙인다
   const taken = conn.prepare("SELECT 1 FROM participants WHERE session_id = ? AND nickname = ?");
   let nickname = base;
-  for (let i = 2; taken.get(session.id, nickname); i++) nickname = `${base}(${i})`;
+  for (let i = 2; await taken.get(session.id, nickname); i++) nickname = `${base}(${i})`;
 
   const recoveryCode = issueRecoveryCode();
   const token = randomToken();
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(id, session.id, nickname, sha256(`${session.id}:${normalizeCode(recoveryCode)}`), sha256(token), t, t, t);
-  addLog(session.id, id, "join", nickname);
+  await addLog(session.id, id, "join", nickname);
   await setParticipantCookie(token);
   return Response.json({ nickname, recoveryCode, sessionCode: session.code });
 }

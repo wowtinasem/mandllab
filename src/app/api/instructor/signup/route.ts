@@ -14,10 +14,10 @@ export async function POST(req: Request) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad("이메일 형식을 확인해 주세요.");
   if (!name) return bad("이름을 입력해 주세요.");
   if (password.length < 8) return bad("비밀번호는 8자 이상이어야 해요.");
-  if (db().prepare("SELECT 1 FROM instructors WHERE email = ?").get(email)) return bad("이미 가입한 이메일이에요.", 409);
+  if (await db().prepare("SELECT 1 FROM instructors WHERE email = ?").get(email)) return bad("이미 가입한 이메일이에요.", 409);
 
   const id = newId();
-  db()
+  await db()
     .prepare("INSERT INTO instructors (id, email, name, org, pw_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .run(id, email, name, org, hashPassword(password), now());
   await startInstructorSession(id);

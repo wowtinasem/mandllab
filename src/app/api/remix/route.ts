@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   if (session.status !== "active") return bad("수업이 끝나서 리믹스할 수 없어요.", 403);
 
   const b = await readJson<{ galleryId: string }>(req);
-  const src = db()
+  const src = await db()
     .prepare(
       `SELECT v.html, v.title, p.nickname FROM gallery g JOIN versions v ON v.id = g.version_id
        JOIN participants p ON p.id = g.participant_id WHERE g.id = ? AND g.session_id = ?`,
@@ -23,12 +23,12 @@ export async function POST(req: Request) {
   const n = participant.version_count + 1;
   const id = newId();
   const summary = `${src.nickname}님의 '${src.title}'을 가져와 리믹스를 시작했어요.`;
-  db()
+  await db()
     .prepare("INSERT INTO versions (id, participant_id, session_id, n, html, title, summary, prompt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)")
     .run(id, participant.id, session.id, n, src.html, src.title, summary, now());
-  db()
+  await db()
     .prepare("UPDATE participants SET version_count = ?, head_version_id = ?, app_title = ?, last_active = ? WHERE id = ?")
     .run(n, id, src.title, now(), participant.id);
-  addLog(session.id, participant.id, "remix", `${src.nickname} · ${src.title}`);
+  await addLog(session.id, participant.id, "remix", `${src.nickname} · ${src.title}`);
   return Response.json({ id, n, title: src.title, summary, prompt: "", created_at: now() });
 }

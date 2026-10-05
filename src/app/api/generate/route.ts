@@ -37,26 +37,26 @@ export async function POST(req: Request) {
   if (session.paused) return Response.json({ error: "강사가 잠시 멈춰 두었어요. 설명을 들어 주세요." }, { status: 423 });
   if (participant.request_count >= session.per_limit)
     return Response.json({ error: "요청 횟수를 모두 썼어요. 코드 탭에서 직접 고치거나 강사에게 문의하세요." }, { status: 429 });
-  if (sessionCostUsd(session.id) >= session.cost_cap_usd)
+  if (await sessionCostUsd(session.id) >= session.cost_cap_usd)
     return Response.json({ error: "이번 수업의 AI 사용 한도에 도달했어요. 강사에게 알려 주세요." }, { status: 429 });
 
   const safety = checkPrompt(prompt);
   if (safety.blocked) {
-    addLog(session.id, participant.id, "blocked", prompt, true);
-    db().prepare("UPDATE participants SET error_streak = error_streak + 1, last_active = ? WHERE id = ?").run(now(), participant.id);
+    await addLog(session.id, participant.id, "blocked", prompt, true);
+    await db().prepare("UPDATE participants SET error_streak = error_streak + 1, last_active = ? WHERE id = ?").run(now(), participant.id);
     return Response.json({ error: safety.blocked }, { status: 422 });
   }
 
   // 기준 버전: 지정한 버전(본인 것만) → 없으면 최신 버전
   const baseId = body.baseVersionId || participant.head_version_id;
   const base = baseId
-    ? (db().prepare("SELECT * FROM versions WHERE id = ? AND participant_id = ?").get(baseId, participant.id) as Version | undefined)
+    ? (await db().prepare("SELECT * FROM versions WHERE id = ? AND participant_id = ?").get(baseId, participant.id) as Version | undefined)
     : undefined;
   if (!base && mode !== "create") mode = mode === "explain" ? "explain" : "create";
   if (mode === "explain" && !base) return Response.json({ error: "설명할 앱이 아직 없어요." }, { status: 400 });
 
   const history = (
-    db()
+    await db()
       .prepare("SELECT prompt FROM versions WHERE participant_id = ? AND prompt != '' ORDER BY n DESC LIMIT 5")
       .all(participant.id) as { prompt: string }[]
   )
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     .reverse();
 
   // 횟수는 먼저 차감하고, AI 쪽 장애로 실패하면 돌려준다
-  db().prepare("UPDATE participants SET request_count = request_count + 1, last_active = ? WHERE id = ?").run(now(), participant.id);
+  await db().prepare("UPDATE participants SET request_count = request_count + 1, last_active = ? WHERE id = ?").run(now(), participant.id);
   const remainingAfter = session.per_limit - participant.request_count - 1;
 
   const encoder = new TextEncoder();
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
           const r = isMockMode()
             ? await streamMock(mockOutput(mode, prompt, base?.html, fullRewrite), onDelta)
             : await callGemini(model, system, user, onDelta);
-          db()
+          await db()
             .prepare(
               "INSERT INTO usage (session_id, participant_id, model, input_tokens, output_tokens, cost_usd, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
@@ -104,7 +104,7 @@ export async function POST(req: Request) {
 
         if (mode === "explain") {
           const r = await run(false);
-          addLog(session.id, participant.id, "explain", prompt);
+          await addLog(session.id, participant.id, "explain", prompt);
           send({ t: "done", answer: r.text.trim(), summary: "", remaining: remainingAfter });
           return;
         }
@@ -113,8 +113,8 @@ export async function POST(req: Request) {
         let html: string | null = null;
 
         if (out.kind === "refused") {
-          addLog(session.id, participant.id, "refused", `${prompt} → ${out.reason}`, true);
-          db().prepare("UPDATE participants SET error_streak = error_streak + 1 WHERE id = ?").run(participant.id);
+          await addLog(session.id, participant.id, "refused", `${prompt} → ${out.reason}`, true);
+          await db().prepare("UPDATE participants SET error_streak = error_streak + 1 WHERE id = ?").run(participant.id);
           send({ t: "refused", d: out.reason, remaining: remainingAfter });
           return;
         }
@@ -145,15 +145,15 @@ export async function POST(req: Request) {
           prompt: mode === "fix" ? `오류 고치기: ${prompt.slice(0, 120)}` : prompt,
           created_at: now(),
         };
-        db()
+        await db()
           .prepare("INSERT INTO versions (id, participant_id, session_id, n, html, title, summary, prompt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
           .run(version.id, version.participant_id, version.session_id, version.n, version.html, version.title, version.summary, version.prompt, version.created_at);
-        db()
+        await db()
           .prepare(
             "UPDATE participants SET version_count = ?, head_version_id = ?, app_title = ?, error_streak = 0, last_active = ? WHERE id = ?",
           )
           .run(version.n, version.id, version.title, now(), participant.id);
-        addLog(session.id, participant.id, mode, prompt, safety.warnings.length > 0);
+        await addLog(session.id, participant.id, mode, prompt, safety.warnings.length > 0);
 
         const { html: _omit, ...meta } = version;
         void _omit;
@@ -161,8 +161,8 @@ export async function POST(req: Request) {
       } catch (e) {
         const userMessage = e instanceof AiError ? e.userMessage : "알 수 없는 오류가 났어요. 다시 시도해 주세요.";
         console.error("[generate]", e);
-        db().prepare("UPDATE participants SET request_count = MAX(0, request_count - 1), error_streak = error_streak + 1 WHERE id = ?").run(participant.id);
-        addLog(session.id, participant.id, "error", `${prompt} → ${e instanceof Error ? e.message.slice(0, 200) : "unknown"}`, true);
+        await db().prepare("UPDATE participants SET request_count = MAX(0, request_count - 1), error_streak = error_streak + 1 WHERE id = ?").run(participant.id);
+        await addLog(session.id, participant.id, "error", `${prompt} → ${e instanceof Error ? e.message.slice(0, 200) : "unknown"}`, true);
         send({ t: "error", d: userMessage });
       } finally {
         release();

@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   const key = `login:${clientIp(req)}`;
   if (joinRateLimited(key)) return bad("시도가 너무 많아요. 1분 뒤 다시 시도해 주세요.", 429);
   const b = await readJson<{ email: string; password: string }>(req);
-  const row = db().prepare("SELECT id, pw_hash FROM instructors WHERE email = ?").get(str(b.email, 120).toLowerCase()) as
+  const row = await db().prepare("SELECT id, pw_hash FROM instructors WHERE email = ?").get(str(b.email, 120).toLowerCase()) as
     | { id: string; pw_hash: string }
     | undefined;
   if (!row || !verifyPassword(String(b.password ?? ""), row.pw_hash)) {

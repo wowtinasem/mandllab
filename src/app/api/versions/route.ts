@@ -22,12 +22,12 @@ export async function POST(req: Request) {
   const id = newId();
   const title = extractTitle(html);
   const summary = str(b.summary, 200) || "코드를 직접 고쳤어요.";
-  db()
+  await db()
     .prepare("INSERT INTO versions (id, participant_id, session_id, n, html, title, summary, prompt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)")
     .run(id, participant.id, session.id, n, html, title, summary, now());
-  db()
+  await db()
     .prepare("UPDATE participants SET version_count = ?, head_version_id = ?, app_title = ?, last_active = ? WHERE id = ?")
     .run(n, id, title, now(), participant.id);
-  addLog(session.id, participant.id, "manual", summary);
+  await addLog(session.id, participant.id, "manual", summary);
   return Response.json({ id, n, title, summary, prompt: "", created_at: now() });
 }

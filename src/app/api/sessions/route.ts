@@ -6,18 +6,21 @@ import { issueSessionCode, refreshSession } from "@/lib/sessions";
 export async function GET() {
   const me = await currentInstructor();
   if (!me) return bad("로그인이 필요해요.", 401);
-  const ids = db().prepare("SELECT id FROM sessions WHERE instructor_id = ? ORDER BY created_at DESC LIMIT 100").all(me.id) as {
+  const ids = await db().prepare("SELECT id FROM sessions WHERE instructor_id = ? ORDER BY created_at DESC LIMIT 100").all(me.id) as {
     id: string;
   }[];
   const count = db().prepare("SELECT COUNT(*) AS n FROM participants WHERE session_id = ?");
   const cost = db().prepare("SELECT COALESCE(SUM(cost_usd),0) AS c FROM usage WHERE session_id = ?");
-  const sessions = ids
-    .map(({ id }) => refreshSession(id)!)
-    .map((s) => ({
-      ...s,
-      participantCount: (count.get(s.id) as { n: number }).n,
-      costUsd: (cost.get(s.id) as { c: number }).c,
-    }));
+  const sessions = await Promise.all(
+    ids.map(async ({ id }) => {
+      const s = (await refreshSession(id))!;
+      return {
+        ...s,
+        participantCount: ((await count.get(s.id)) as { n: number }).n,
+        costUsd: ((await cost.get(s.id)) as { c: number }).c,
+      };
+    }),
+  );
   return Response.json({ sessions });
 }
 
@@ -33,9 +36,9 @@ export async function POST(req: Request) {
   const costCap = Math.min(1000, Math.max(0.1, Number(b.costCapUsd) || 50));
 
   const id = newId();
-  const code = issueSessionCode();
+  const code = await issueSessionCode();
   const t = now();
-  db()
+  await db()
     .prepare(
       `INSERT INTO sessions (id, code, title, instructor_id, status, per_limit, cost_cap_usd, capacity, ends_at, created_at)
        VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,

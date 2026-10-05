@@ -11,11 +11,11 @@ import type { Version } from "./types";
  * - 그 세션의 강사
  */
 export async function readableVersion(versionId: string): Promise<{ version: Version; nickname: string } | null> {
-  const row = db()
+  const row = await db()
     .prepare("SELECT v.*, p.nickname FROM versions v JOIN participants p ON p.id = v.participant_id WHERE v.id = ?")
     .get(versionId) as (Version & { nickname: string }) | undefined;
   if (!row) return null;
-  const session = refreshSession(row.session_id);
+  const session = await refreshSession(row.session_id);
   if (!session || session.status === "expired") return null;
   const { nickname, ...version } = row;
 
@@ -23,7 +23,7 @@ export async function readableVersion(versionId: string): Promise<{ version: Ver
   if (me && me.session.id === row.session_id) {
     if (me.participant.id === row.participant_id) return { version, nickname };
     const shared =
-      session.spotlight_version_id === row.id || db().prepare("SELECT 1 FROM gallery WHERE version_id = ?").get(row.id);
+      session.spotlight_version_id === row.id || await db().prepare("SELECT 1 FROM gallery WHERE version_id = ?").get(row.id);
     if (shared) return { version, nickname };
   }
   const inst = await currentInstructor();

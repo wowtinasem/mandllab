@@ -10,7 +10,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/sessions/[id]/g
   const owned = await ownedSession(id);
   if (!owned) return bad("세션을 찾을 수 없어요.", 404);
 
-  const rows = db()
+  const rows = await db()
     .prepare(
       `SELECT v.html, v.title, v.n, v.created_at, p.nickname FROM gallery g
        JOIN versions v ON v.id = g.version_id JOIN participants p ON p.id = g.participant_id

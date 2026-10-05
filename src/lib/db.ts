@@ -1,12 +1,11 @@
 import "server-only";
-import { DatabaseSync } from "node:sqlite";
+import { createClient, type Client, type InArgs } from "@libsql/client";
 import fs from "node:fs";
 import path from "node:path";
 
+// 로컬 개발: data/mandllab.db 파일. 배포(Vercel): Turso (TURSO_DATABASE_URL, TURSO_AUTH_TOKEN)
+// 연결이 요청마다 달라질 수 있으므로 FK 연쇄 삭제에 기대지 않고 지울 때는 테이블마다 명시적으로 지운다.
 const SCHEMA = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS instructors (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
@@ -105,30 +104,69 @@ CREATE TABLE IF NOT EXISTS usage (
 CREATE INDEX IF NOT EXISTS usage_session ON usage(session_id);
 `;
 
-const g = globalThis as unknown as { __mandllabDb?: DatabaseSync };
+type Arg = string | number | null;
 
-export function db(): DatabaseSync {
+const g = globalThis as unknown as { __mandllabDb?: { client: Client; ready: Promise<void> } };
+
+function conn() {
   if (!g.__mandllabDb) {
-    const file = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "mandllab.db");
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const conn = new DatabaseSync(file);
-    conn.exec(SCHEMA);
-    g.__mandllabDb = conn;
+    const url = process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL;
+    let client: Client;
+    if (url) {
+      client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN || process.env.LIBSQL_AUTH_TOKEN });
+    } else {
+      // Vercel 은 /tmp 만 쓸 수 있다. Turso 연결 전 임시 실행용이며 데이터가 언제든 사라질 수 있다.
+      const fallback = process.env.VERCEL ? "/tmp/mandllab.db" : path.join(process.cwd(), "data", "mandllab.db");
+      if (process.env.VERCEL) console.warn("[db] TURSO_DATABASE_URL 이 없어 임시 저장소(/tmp)를 씁니다. 데이터가 유지되지 않습니다.");
+      const file = process.env.DATABASE_PATH || fallback;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      client = createClient({ url: `file:${file}` });
+    }
+    const ready = client.executeMultiple(SCHEMA).then(() => undefined);
+    g.__mandllabDb = { client, ready };
+    ready.catch(() => {
+      g.__mandllabDb = undefined; // 다음 요청에서 다시 시도
+    });
   }
   return g.__mandllabDb;
 }
 
-export function tx<T>(fn: () => T): T {
-  const conn = db();
-  conn.exec("BEGIN IMMEDIATE");
-  try {
-    const out = fn();
-    conn.exec("COMMIT");
-    return out;
-  } catch (e) {
-    conn.exec("ROLLBACK");
-    throw e;
-  }
+async function exec(sql: string, args: Arg[]) {
+  const c = conn();
+  await c.ready;
+  return c.client.execute({ sql, args: args as InArgs });
+}
+
+/** node:sqlite 와 비슷한 모양의 비동기 문장 */
+export function db() {
+  return {
+    prepare(sql: string) {
+      return {
+        async get(...args: Arg[]): Promise<unknown> {
+          const rs = await exec(sql, args);
+          return rs.rows[0] ? Object.fromEntries(rs.columns.map((col, i) => [col, rs.rows[0][i]])) : undefined;
+        },
+        async all(...args: Arg[]): Promise<unknown[]> {
+          const rs = await exec(sql, args);
+          return rs.rows.map((row) => Object.fromEntries(rs.columns.map((col, i) => [col, row[i]])));
+        },
+        async run(...args: Arg[]) {
+          const rs = await exec(sql, args);
+          return { changes: rs.rowsAffected };
+        },
+      };
+    },
+  };
+}
+
+/** 여러 쓰기를 한 트랜잭션으로 */
+export async function batch(statements: { sql: string; args?: Arg[] }[]) {
+  const c = conn();
+  await c.ready;
+  await c.client.batch(
+    statements.map((st) => ({ sql: st.sql, args: (st.args ?? []) as InArgs })),
+    "write",
+  );
 }
 
 export const now = () => Date.now();
