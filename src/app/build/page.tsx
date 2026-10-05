@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Logo from "@/components/Logo";
 import Preview from "@/components/Preview";
+import { SplitHandle, useResizable } from "@/components/useResizable";
 import { ApiError, api, formatDateTime, streamGenerate } from "@/lib/client";
 import { HINTS, STARTERS } from "@/lib/starters";
 import type { VersionMeta } from "@/lib/types";
@@ -46,6 +47,14 @@ export default function Builder() {
   const [tab, setTab] = useState<Tab>("preview");
   const [mobilePane, setMobilePane] = useState<"chat" | "app">("chat");
   const [showDownload, setShowDownload] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const {
+    containerRef: chatSplitRef,
+    width: chatWidth,
+    dragging: chatDragging,
+    handleProps: chatHandle,
+    overlay: chatOverlay,
+  } = useResizable({ storageKey: "ml:chatWidth", defaultWidth: 420, min: 300, maxRatio: 0.6 });
   const chatEnd = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
@@ -89,6 +98,10 @@ export default function Builder() {
 
   const run = async (mode: "create" | "edit" | "fix" | "explain", text: string) => {
     if (!text.trim() || !canAsk) return;
+    // 보낸 요청은 입력창에서 바로 지우고 대화 목록에 말풍선으로 보여준다
+    if (mode === "create" || mode === "edit") setPrompt("");
+    setPendingPrompt(mode === "fix" ? "앱 오류를 고쳐줘" : text);
+    let failed = false;
     setBusy(true);
     setStatus("요청을 보내는 중…");
     setStreamText("");
@@ -100,7 +113,10 @@ export default function Builder() {
         else if (ev.t === "delta") setStreamText((s) => (s + ev.d).slice(-4000));
         else if (ev.t === "warn") addNote("warn", ev.d);
         else if (ev.t === "refused") addNote("danger", `AI가 이 요청은 만들지 않았어요: ${ev.d}`);
-        else if (ev.t === "error") addNote("danger", ev.d);
+        else if (ev.t === "error") {
+          failed = true;
+          addNote("danger", ev.d);
+        }
         else if (ev.t === "done") {
           if (ev.answer) addNote("answer", ev.answer, text);
           if (ev.version) {
@@ -112,10 +128,13 @@ export default function Builder() {
           }
         }
       });
-      if (mode !== "explain") setPrompt("");
     } catch (e) {
+      failed = true;
       addNote("danger", (e as Error).message);
     } finally {
+      // 서버·네트워크 문제로 실패하면 다시 보낼 수 있게 요청 문장을 돌려놓는다
+      if (failed && (mode === "create" || mode === "edit")) setPrompt((cur) => cur || text);
+      setPendingPrompt(null);
       setBusy(false);
       setStatus("");
       setStreamText("");
@@ -208,9 +227,9 @@ export default function Builder() {
         ))}
       </div>
 
-      <div className="relative flex min-h-0 flex-1">
+      <div ref={chatSplitRef} className="relative flex min-h-0 flex-1" style={{ "--chat-w": `${chatWidth}px` } as React.CSSProperties}>
         {/* 왼쪽: 대화 */}
-        <section className={`${mobilePane === "chat" ? "flex" : "hidden"} w-full flex-col border-r border-line bg-bg lg:flex lg:w-[420px] lg:shrink-0`}>
+        <section className={`${mobilePane === "chat" ? "flex" : "hidden"} w-full flex-col bg-bg lg:flex lg:w-[var(--chat-w)] lg:shrink-0`}>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
             {versions.length === 0 && !busy && (
               <div>
@@ -235,6 +254,9 @@ export default function Builder() {
 
             <Timeline versions={versions} notes={notes} selectedId={selectedId} onSelect={setSelectedId} />
 
+            {busy && pendingPrompt && (
+              <div className="ml-8 rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-sm text-accent-fg">{pendingPrompt}</div>
+            )}
             {busy && (
               <div className="card p-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-accent">
@@ -295,6 +317,8 @@ export default function Builder() {
             )}
           </form>
         </section>
+
+        <SplitHandle props={chatHandle} dragging={chatDragging} />
 
         {/* 오른쪽: 앱 */}
         <section className={`${mobilePane === "app" ? "flex" : "hidden"} min-w-0 flex-1 flex-col lg:flex`}>
@@ -385,6 +409,7 @@ export default function Builder() {
               <CodeTab
                 key={`${selectedId}:${html ? "loaded" : "loading"}`}
                 html={html ?? ""}
+                previewKey={me.nickname}
                 editable={active}
                 canAsk={canAsk}
                 onSaved={adoptVersion}
@@ -406,6 +431,8 @@ export default function Builder() {
           </div>
         )}
       </div>
+
+      {chatOverlay}
 
       {showDownload && selected && (
         <DownloadDialog versions={versions} initialId={selected.id} onClose={() => setShowDownload(false)} />
@@ -497,6 +524,7 @@ function Empty({ busy, hasVersions }: { busy: boolean; hasVersions: boolean }) {
 
 function CodeTab({
   html,
+  previewKey,
   editable,
   canAsk,
   onSaved,
@@ -504,6 +532,7 @@ function CodeTab({
   onError,
 }: {
   html: string;
+  previewKey: string;
   editable: boolean;
   canAsk: boolean;
   onSaved: (v: VersionMeta & { html: string }) => void;
@@ -514,6 +543,20 @@ function CodeTab({
   const [question, setQuestion] = useState("");
   const [saving, setSaving] = useState(false);
   const dirty = code !== html;
+  const {
+    containerRef: codeSplitRef,
+    width: codeWidth,
+    dragging: codeDragging,
+    handleProps: codeHandle,
+    overlay: codeOverlay,
+  } = useResizable({ storageKey: "ml:codeWidth", defaultWidth: 560, min: 280, maxRatio: 0.8, minRight: 240 });
+
+  // 직접 고치는 코드를 잠깐 멈췄을 때 오른쪽 결과에 반영
+  const [livePreview, setLivePreview] = useState(html);
+  useEffect(() => {
+    const t = setTimeout(() => setLivePreview(code), 600);
+    return () => clearTimeout(t);
+  }, [code]);
 
   return (
     <div className="flex h-full flex-col">
@@ -557,14 +600,26 @@ function CodeTab({
           </button>
         )}
       </div>
-      <textarea
-        className="min-h-0 flex-1 resize-none bg-surface p-4 font-mono text-[12.5px] leading-relaxed text-ink outline-none"
-        spellCheck={false}
-        value={code}
-        readOnly={!editable}
-        onChange={(e) => setCode(e.target.value)}
-        aria-label="앱 코드"
-      />
+      <div ref={codeSplitRef} className="flex min-h-0 flex-1" style={{ "--code-w": `${codeWidth}px` } as React.CSSProperties}>
+        <textarea
+          className="min-h-0 w-full resize-none bg-surface p-4 font-mono text-[12.5px] leading-relaxed text-ink outline-none lg:w-[var(--code-w)] lg:shrink-0"
+          spellCheck={false}
+          value={code}
+          readOnly={!editable}
+          onChange={(e) => setCode(e.target.value)}
+          aria-label="앱 코드"
+        />
+        <SplitHandle props={codeHandle} dragging={codeDragging} />
+        <div className="hidden min-w-0 flex-1 flex-col lg:flex">
+          <div className="border-b border-line bg-surface-2 px-3 py-1 text-xs text-muted">
+            결과 {dirty ? "· 고친 코드 미리보기 (아직 적용 전)" : ""}
+          </div>
+          <div className="min-h-0 flex-1">
+            <Preview html={livePreview} storageKey={previewKey} title="코드 결과 미리보기" />
+          </div>
+        </div>
+      </div>
+      {codeOverlay}
     </div>
   );
 }
