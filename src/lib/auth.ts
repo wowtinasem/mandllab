@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { db, now } from "./db";
 import type { Instructor, Participant, Session } from "./types";
 import { refreshSession } from "./sessions";
+export { hashPassword, verifyPassword } from "./password";
 
 export const INSTRUCTOR_COOKIE = "ml_inst";
 export const PARTICIPANT_COOKIE = "ml_part";
@@ -13,19 +14,6 @@ const INSTRUCTOR_TTL_MS = 30 * 24 * 3600 * 1000;
 export const newId = () => crypto.randomUUID();
 export const randomToken = () => crypto.randomBytes(32).toString("base64url");
 export const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
-
-export function hashPassword(pw: string): string {
-  const salt = crypto.randomBytes(16);
-  const key = crypto.scryptSync(pw, salt, 32);
-  return `${salt.toString("hex")}:${key.toString("hex")}`;
-}
-
-export function verifyPassword(pw: string, stored: string): boolean {
-  const [saltHex, keyHex] = stored.split(":");
-  if (!saltHex || !keyHex) return false;
-  const key = crypto.scryptSync(pw, Buffer.from(saltHex, "hex"), 32);
-  return crypto.timingSafeEqual(key, Buffer.from(keyHex, "hex"));
-}
 
 const cookieBase = {
   httpOnly: true,

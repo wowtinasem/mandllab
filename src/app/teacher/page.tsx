@@ -57,8 +57,14 @@ function AuthForm({ inviteRequired, onDone }: { inviteRequired: boolean; onDone:
             <Field id="org" label="소속 (기업·대학, 선택)" value={f.org} onChange={set("org")} />
           </>
         )}
-        <Field id="email" label="이메일" type="email" value={f.email} onChange={set("email")} />
-        <Field id="pw" label="비밀번호 (8자 이상)" type="password" value={f.password} onChange={set("password")} />
+        <Field
+          id="email"
+          label={mode === "login" ? "이메일 (관리자는 아이디)" : "이메일"}
+          type={mode === "login" ? "text" : "email"}
+          value={f.email}
+          onChange={set("email")}
+        />
+        <Field id="pw" label={mode === "login" ? "비밀번호" : "비밀번호 (8자 이상)"} type="password" value={f.password} onChange={set("password")} />
         {mode === "signup" && inviteRequired && (
           <Field id="invite" label="강사 초대 키" value={f.inviteKey} onChange={set("inviteKey")} />
         )}

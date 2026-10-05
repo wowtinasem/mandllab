@@ -2,6 +2,7 @@ import "server-only";
 import { createClient, type Client, type InArgs } from "@libsql/client";
 import fs from "node:fs";
 import path from "node:path";
+import { hashPassword } from "./password";
 
 // 로컬 개발: data/mandllab.db 파일. 배포(Vercel): Turso (TURSO_DATABASE_URL, TURSO_AUTH_TOKEN)
 // 연결이 요청마다 달라질 수 있으므로 FK 연쇄 삭제에 기대지 않고 지울 때는 테이블마다 명시적으로 지운다.
@@ -122,13 +123,27 @@ function conn() {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       client = createClient({ url: `file:${file}` });
     }
-    const ready = client.executeMultiple(SCHEMA).then(() => undefined);
+    const ready = client.executeMultiple(SCHEMA).then(() => seedAdmin(client));
     g.__mandllabDb = { client, ready };
     ready.catch(() => {
       g.__mandllabDb = undefined; // 다음 요청에서 다시 시도
     });
   }
   return g.__mandllabDb;
+}
+
+// 관리자 테스트 계정: ADMIN_TEST_PASSWORD 가 있으면 아이디 'admin' 으로 강사 화면에 로그인할 수 있다.
+// 비밀번호는 코드에 두지 않고 환경 변수로만 받으며, 바꾸면 다음 서버 시작 때 반영된다.
+export const ADMIN_LOGIN_ID = "admin";
+
+async function seedAdmin(client: Client) {
+  const pw = process.env.ADMIN_TEST_PASSWORD;
+  if (!pw) return;
+  await client.execute({
+    sql: `INSERT INTO instructors (id, email, name, org, pw_hash, created_at) VALUES ('admin-test', ?, '관리자(테스트)', '만들랩', ?, ?)
+          ON CONFLICT(email) DO UPDATE SET pw_hash = excluded.pw_hash`,
+    args: [ADMIN_LOGIN_ID, hashPassword(pw), Date.now()],
+  });
 }
 
 async function exec(sql: string, args: Arg[]) {
