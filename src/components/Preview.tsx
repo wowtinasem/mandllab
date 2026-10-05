@@ -68,6 +68,8 @@ export default function Preview({
       title={title}
       srcDoc={srcDoc}
       sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
+      // 앱 안의 "복사하기" 버튼이 동작하도록 클립보드 쓰기만 허용 (읽기는 허용하지 않음)
+      allow="clipboard-write"
       className={`h-full w-full border-0 bg-white ${className}`}
     />
   );

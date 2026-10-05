@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Logo from "@/components/Logo";
 import Preview from "@/components/Preview";
 import { SplitHandle, useResizable } from "@/components/useResizable";
+import { PlanQuestionCard, PlanSpecCard, toPlanHistory, type PlanTurn } from "@/components/PlanCards";
 import { ApiError, api, formatDateTime, streamGenerate } from "@/lib/client";
 import { HINTS, STARTERS } from "@/lib/starters";
 import type { VersionMeta } from "@/lib/types";
@@ -48,6 +49,10 @@ export default function Builder() {
   const [mobilePane, setMobilePane] = useState<"chat" | "app">("chat");
   const [showDownload, setShowDownload] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  // 질문으로 시작하기: 켜져 있으면 입력이 바로 만들기 대신 AI 기획 도우미와의 대화가 된다
+  const [planMode, setPlanMode] = useState(false);
+  const [planTurns, setPlanTurns] = useState<PlanTurn[]>([]);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const {
     containerRef: chatSplitRef,
     width: chatWidth,
@@ -74,6 +79,23 @@ export default function Builder() {
     return () => clearInterval(t);
   }, [refresh]);
 
+  // 질문 대화는 새로고침해도 이어지도록 이 브라우저에 보관
+  const planKey = me ? `ml:plan:${me.session.code}:${me.nickname}` : null;
+  useEffect(() => {
+    if (!planKey) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(planKey) || "[]");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에 보관한 대화는 마운트 뒤에만 읽을 수 있다
+      if (Array.isArray(saved) && saved.length) setPlanTurns(saved);
+    } catch {}
+  }, [planKey]);
+  useEffect(() => {
+    if (!planKey) return;
+    try {
+      localStorage.setItem(planKey, JSON.stringify(planTurns.slice(-30)));
+    } catch {}
+  }, [planKey, planTurns]);
+
   // 선택한 버전의 코드 불러오기
   useEffect(() => {
     if (!selectedId || htmlCache[selectedId]) return;
@@ -96,11 +118,17 @@ export default function Builder() {
   const addNote = (tone: Note["tone"], text: string, question?: string) =>
     setNotes((n) => [...n, { at: Date.now(), tone, text, question }]);
 
-  const run = async (mode: "create" | "edit" | "fix" | "explain", text: string) => {
+  const run = async (mode: "create" | "edit" | "fix" | "explain" | "plan", text: string, opts?: { fromInput?: boolean }) => {
     if (!text.trim() || !canAsk) return;
     // 보낸 요청은 입력창에서 바로 지우고 대화 목록에 말풍선으로 보여준다
-    if (mode === "create" || mode === "edit") setPrompt("");
-    setPendingPrompt(mode === "fix" ? "앱 오류를 고쳐줘" : text);
+    if (opts?.fromInput) setPrompt("");
+    const history = toPlanHistory(planTurns);
+    if (mode === "plan") {
+      setPlanTurns((t) => [...t.map((x) => (x.role === "ai" ? { ...x, answered: true } : x)), { at: Date.now(), role: "user", text }]);
+      setPendingPrompt(null);
+    } else {
+      setPendingPrompt(mode === "fix" ? "앱 오류를 고쳐줘" : text);
+    }
     let failed = false;
     setBusy(true);
     setStatus("요청을 보내는 중…");
@@ -108,7 +136,7 @@ export default function Builder() {
     setPreviewError(null);
     if (mode !== "explain") setMobilePane("chat");
     try {
-      await streamGenerate({ mode, prompt: text, baseVersionId: selectedId }, (ev) => {
+      await streamGenerate({ mode, prompt: text, baseVersionId: selectedId, planHistory: mode === "plan" ? history : undefined }, (ev) => {
         if (ev.t === "status") setStatus(ev.d);
         else if (ev.t === "delta") setStreamText((s) => (s + ev.d).slice(-4000));
         else if (ev.t === "warn") addNote("warn", ev.d);
@@ -119,6 +147,11 @@ export default function Builder() {
         }
         else if (ev.t === "done") {
           if (ev.answer) addNote("answer", ev.answer, text);
+          if (ev.plan) {
+            const reply = ev.plan;
+            setPlanTurns((t) => [...t, { at: Date.now(), role: "ai", reply }]);
+            setMe((m) => (m ? { ...m, remaining: ev.remaining } : m));
+          }
           if (ev.version) {
             const v = ev.version;
             setMe((m) => (m ? { ...m, versions: [...m.versions, v], headVersionId: v.id, remaining: ev.remaining } : m));
@@ -133,7 +166,7 @@ export default function Builder() {
       addNote("danger", (e as Error).message);
     } finally {
       // 서버·네트워크 문제로 실패하면 다시 보낼 수 있게 요청 문장을 돌려놓는다
-      if (failed && (mode === "create" || mode === "edit")) setPrompt((cur) => cur || text);
+      if (failed && opts?.fromInput) setPrompt((cur) => cur || text);
       setPendingPrompt(null);
       setBusy(false);
       setStatus("");
@@ -142,10 +175,55 @@ export default function Builder() {
     }
   };
 
+  // "질문해줘", "아이디어가 없어" 처럼 말하면 자동으로 질문 모드로 바꾼다
+  const wantsQuestions = (t: string) =>
+    /질문(을|해|좀|부터)|물어(봐|보)|아이디어가?\s*(없|부족|적)|뭘\s*만들|무엇(을|부터)\s*만들|어떻게\s*만들(지|면)/.test(t);
+
   const submit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    run(versions.length ? "edit" : "create", prompt);
+    if (!prompt.trim()) return;
+    const usePlan = planMode || wantsQuestions(prompt);
+    if (usePlan && !planMode) setPlanMode(true);
+    run(usePlan ? "plan" : versions.length ? "edit" : "create", prompt, { fromInput: true });
   };
+
+  const buildFromPlan = (turnIndex: number, planPrompt: string) => {
+    setPlanMode(false);
+    setPlanTurns((t) => t.map((x, i) => (i === turnIndex && x.role === "ai" ? { ...x, built: true } : x)));
+    run(versions.length ? "edit" : "create", planPrompt);
+  };
+
+  const startPlanMode = () => {
+    setPlanMode(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const latestAiIndex = planTurns.map((t) => t.role).lastIndexOf("ai");
+  const planExtras = planTurns.map((t, i) => ({
+    at: t.at,
+    key: `plan${i}`,
+    node:
+      t.role === "user" ? (
+        <div className="ml-8 whitespace-pre-wrap rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-sm text-accent-fg">{t.text}</div>
+      ) : t.reply.plan ? (
+        <PlanSpecCard
+          message={t.reply.message}
+          plan={t.reply.plan}
+          hasApp={versions.length > 0}
+          disabled={!canAsk || i !== latestAiIndex}
+          built={Boolean(t.built)}
+          onBuild={(prompt) => buildFromPlan(i, prompt)}
+        />
+      ) : (
+        <PlanQuestionCard
+          reply={t.reply}
+          active={i === latestAiIndex && !t.answered}
+          disabled={!canAsk}
+          onSubmit={(text) => run("plan", text)}
+          onSkip={() => run("plan", "지금까지 이야기한 내용으로 바로 설계안을 정리해 주세요.")}
+        />
+      ),
+  }));
 
   const shareToGallery = async () => {
     if (!selectedId) return;
@@ -231,11 +309,22 @@ export default function Builder() {
         {/* 왼쪽: 대화 */}
         <section className={`${mobilePane === "chat" ? "flex" : "hidden"} w-full flex-col bg-bg lg:flex lg:w-[var(--chat-w)] lg:shrink-0`}>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-            {versions.length === 0 && !busy && (
+            {versions.length === 0 && !busy && planTurns.length === 0 && (
               <div>
                 <h2 className="text-lg font-bold">무엇을 만들어 볼까요?</h2>
                 <p className="mt-1 text-sm text-muted">카드를 고르거나, 아래에 만들고 싶은 앱을 자유롭게 설명하세요.</p>
-                <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <button
+                  disabled={!canAsk}
+                  onClick={startPlanMode}
+                  className="mt-4 flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-accent bg-accent-soft p-4 text-left transition hover:brightness-95 disabled:opacity-50"
+                >
+                  <span className="text-2xl">💡</span>
+                  <span>
+                    <span className="block text-sm font-bold text-accent">아이디어만 있어요 — 질문으로 시작하기</span>
+                    <span className="block text-xs text-muted">AI가 몇 가지 물어보고, 고르기만 하면 설계안을 같이 만들어 줘요</span>
+                  </span>
+                </button>
+                <div className="mt-3 grid grid-cols-2 gap-2.5">
                   {STARTERS.map((s) => (
                     <button
                       key={s.title}
@@ -252,7 +341,7 @@ export default function Builder() {
               </div>
             )}
 
-            <Timeline versions={versions} notes={notes} selectedId={selectedId} onSelect={setSelectedId} />
+            <Timeline versions={versions} notes={notes} extras={planExtras} selectedId={selectedId} onSelect={setSelectedId} />
 
             {busy && pendingPrompt && (
               <div className="ml-8 rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-sm text-accent-fg">{pendingPrompt}</div>
@@ -275,7 +364,29 @@ export default function Builder() {
 
           {/* 입력 */}
           <form onSubmit={submit} className="border-t border-line bg-surface p-3">
-            {versions.length > 0 && active && (
+            {active && (
+              <div className="mb-2 flex items-center gap-1 rounded-xl bg-surface-2 p-1 text-xs font-semibold" role="radiogroup" aria-label="입력 방식">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!planMode}
+                  onClick={() => setPlanMode(false)}
+                  className={`flex-1 rounded-lg px-2 py-1.5 ${!planMode ? "bg-surface text-ink shadow-sm" : "text-muted"}`}
+                >
+                  ⚡ 바로 {versions.length ? "고치기" : "만들기"}
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={planMode}
+                  onClick={startPlanMode}
+                  className={`flex-1 rounded-lg px-2 py-1.5 ${planMode ? "bg-surface text-accent shadow-sm" : "text-muted"}`}
+                >
+                  💬 질문하며 정하기
+                </button>
+              </div>
+            )}
+            {versions.length > 0 && active && !planMode && (
               <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
                 {HINTS.map((h) => (
                   <button type="button" key={h} className="chip shrink-0" disabled={!canAsk} onClick={() => setPrompt(h)}>
@@ -286,6 +397,7 @@ export default function Builder() {
             )}
             <div className="flex items-end gap-2">
               <textarea
+                ref={inputRef}
                 className="input min-h-[52px] flex-1 resize-none text-[15px]"
                 rows={Math.min(7, Math.max(2, prompt.split("\n").length, Math.ceil(prompt.length / 30)))}
                 placeholder={
@@ -293,9 +405,13 @@ export default function Builder() {
                     ? "수업이 끝났어요"
                     : me.session.paused
                       ? "강사가 잠시 멈춰 두었어요"
-                      : versions.length
-                        ? "무엇을 바꿀까요? 예: 합계 아래에 막대 차트를 넣어줘"
-                        : "만들고 싶은 앱을 설명해 주세요"
+                      : planMode
+                        ? versions.length
+                          ? "무엇을 더하고 싶은지 대략 적어 주세요. 예: 통계 화면을 넣고 싶어"
+                          : "만들고 싶은 앱을 한 줄로 적어 주세요. 예: 학습 다이어리"
+                        : versions.length
+                          ? "무엇을 바꿀까요? 예: 합계 아래에 막대 차트를 넣어줘"
+                          : "만들고 싶은 앱을 설명해 주세요"
                 }
                 value={prompt}
                 disabled={!active || me.session.paused}
@@ -309,7 +425,7 @@ export default function Builder() {
                 aria-label="AI에게 요청"
               />
               <button className="btn-primary h-[52px] px-5" disabled={!canAsk || !prompt.trim()}>
-                {busy ? "…" : versions.length ? "고치기" : "만들기"}
+                {busy ? "…" : planMode ? "보내기" : versions.length ? "고치기" : "만들기"}
               </button>
             </div>
             {me.remaining === 0 && active && (
@@ -444,27 +560,30 @@ export default function Builder() {
 function Timeline({
   versions,
   notes,
+  extras,
   selectedId,
   onSelect,
 }: {
   versions: VersionMeta[];
   notes: Note[];
+  extras: { at: number; key: string; node: React.ReactNode }[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
   const items = [
     ...versions.map((v) => ({ at: v.created_at, kind: "version" as const, v })),
     ...notes.map((n) => ({ at: n.at, kind: "note" as const, n })),
+    ...extras.map((x) => ({ at: x.at, kind: "extra" as const, x })),
   ].sort((a, b) => a.at - b.at);
 
   return (
     <>
       {items.map((it, i) =>
-        it.kind === "version" ? (
+        it.kind === "extra" ? (
+          <div key={it.x.key}>{it.x.node}</div>
+        ) : it.kind === "version" ? (
           <div key={it.v.id} className="space-y-2">
-            {it.v.prompt && (
-              <div className="ml-8 rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-sm text-accent-fg">{it.v.prompt}</div>
-            )}
+            {it.v.prompt && <PromptBubble text={it.v.prompt} />}
             <button
               onClick={() => onSelect(it.v.id)}
               className={`card block w-full p-3 text-left text-sm transition hover:border-accent ${selectedId === it.v.id ? "border-accent ring-1 ring-accent" : ""}`}
@@ -499,6 +618,22 @@ function Timeline({
         ),
       )}
     </>
+  );
+}
+
+/** 내가 보낸 요청 말풍선. 설계안처럼 긴 요청은 4줄까지만 보이고 눌러서 펼친다 */
+function PromptBubble({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 160;
+  return (
+    <div className="ml-8 rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-sm text-accent-fg">
+      <div className={`whitespace-pre-wrap ${long && !open ? "line-clamp-4" : ""}`}>{text}</div>
+      {long && (
+        <button type="button" className="mt-1 text-xs font-semibold underline opacity-80" onClick={() => setOpen((v) => !v)}>
+          {open ? "접기" : "더보기"}
+        </button>
+      )}
+    </div>
   );
 }
 

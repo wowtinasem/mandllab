@@ -1,6 +1,6 @@
 "use client";
 
-import type { StreamEvent } from "./types";
+import type { PlanHistoryItem, StreamEvent } from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -24,7 +24,7 @@ export async function api<T = unknown>(url: string, init?: { method?: string; bo
 
 /** /api/generate 의 줄 단위 이벤트 스트림을 읽는다 */
 export async function streamGenerate(
-  body: { mode: string; prompt: string; baseVersionId?: string | null },
+  body: { mode: string; prompt: string; baseVersionId?: string | null; planHistory?: PlanHistoryItem[] },
   onEvent: (ev: StreamEvent) => void,
 ): Promise<void> {
   const res = await fetch("/api/generate", {

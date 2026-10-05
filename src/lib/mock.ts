@@ -183,3 +183,32 @@ export async function streamMock(text: string, onDelta: (s: string) => void, sig
   // 대략적인 토큰 수 (한국어 섞인 HTML 기준 글자 3개당 1토큰)
   return { text, inputTokens: 0, outputTokens: Math.ceil(text.length / 3) };
 }
+
+/** 데모 모드의 "질문으로 시작하기": 첫 말에는 질문, 답을 받은 뒤에는 설계안 */
+export function mockPlan(prompt: string, answeredRounds: number, hasApp: boolean): string {
+  const idea = prompt.slice(0, 40);
+  if (answeredRounds === 0 && !/바로|알아서|정리/.test(prompt)) {
+    return JSON.stringify({
+      message: `'${idea}' 좋은 생각이에요! 몇 가지만 골라 주시면 딱 맞는 앱으로 정리해 드릴게요. (데모 모드 예시 질문)`,
+      questions: [
+        { id: "q1", question: "이 앱은 주로 누가 쓰나요?", type: "single", options: ["나 혼자", "우리 팀", "고객·외부 사람"], allowOther: true },
+        { id: "q2", question: "꼭 있어야 하는 기능을 골라 주세요", type: "multi", options: ["입력하고 목록으로 보기", "합계·통계 보기", "차트로 보기", "CSV로 내려받기"], allowOther: true },
+        { id: "q3", question: "화면 분위기는 어떤 게 좋아요?", type: "single", options: ["깔끔한 흰색", "산뜻한 파스텔", "차분한 다크 모드"], allowOther: false },
+      ],
+      plan: null,
+    });
+  }
+  return JSON.stringify({
+    message: "답해 주신 내용으로 설계안을 정리했어요. 마음에 들면 '이대로 만들기'를 눌러 주세요. (데모 모드 예시 설계안)",
+    questions: [],
+    plan: {
+      title: hasApp ? "기능을 더한 내 앱" : "나의 맞춤 앱",
+      summary: `${idea}을(를) 위한 간단한 기록 앱이에요.`,
+      features: ["항목 입력과 목록 보기", "합계·통계 보기", "브라우저에 자동 저장"],
+      later: ["차트로 보기", "CSV로 내려받기"],
+      prompt: hasApp
+        ? `지금 앱에 합계·통계를 보여주는 영역을 추가해줘. 요청 배경: ${prompt}`
+        : `${prompt}. 항목을 입력하면 목록에 쌓이고 합계와 통계를 보여주는 앱을 만들어줘. 데이터는 브라우저에 저장하고 깔끔한 디자인으로.`,
+    },
+  });
+}

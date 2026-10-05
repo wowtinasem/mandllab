@@ -55,13 +55,42 @@ export interface Version {
 
 export type VersionMeta = Omit<Version, "html">;
 
-export type GenerateMode = "create" | "edit" | "fix" | "explain";
+export type GenerateMode = "create" | "edit" | "fix" | "explain" | "plan";
+
+/** 질문으로 시작하기: AI가 묻는 질문 하나 */
+export interface PlanQuestion {
+  id: string;
+  question: string;
+  type: "single" | "multi" | "text";
+  options: string[];
+  allowOther: boolean;
+}
+
+/** 질문으로 시작하기: 대화가 모이면 나오는 설계안 */
+export interface PlanSpec {
+  title: string;
+  summary: string;
+  features: string[];
+  later: string[];
+  prompt: string;
+}
+
+export interface PlanReply {
+  message: string;
+  questions: PlanQuestion[];
+  plan: PlanSpec | null;
+}
+
+export interface PlanHistoryItem {
+  role: "user" | "ai";
+  text: string;
+}
 
 /** /api/generate 가 한 줄씩 내려보내는 이벤트 */
 export type StreamEvent =
   | { t: "status"; d: string }
   | { t: "delta"; d: string }
   | { t: "warn"; d: string }
-  | { t: "done"; version?: VersionMeta; answer?: string; summary: string; remaining: number }
+  | { t: "done"; version?: VersionMeta; answer?: string; plan?: PlanReply; summary: string; remaining: number }
   | { t: "refused"; d: string; remaining: number }
   | { t: "error"; d: string };

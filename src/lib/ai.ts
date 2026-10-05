@@ -1,5 +1,5 @@
 import "server-only";
-import type { GenerateMode } from "./types";
+import type { GenerateMode, PlanHistoryItem, PlanQuestion, PlanReply } from "./types";
 
 // ───────────────────────── 모델과 단가 ─────────────────────────
 
@@ -31,6 +31,7 @@ export function pickModel(mode: GenerateMode, prompt: string): string {
   if (isMockMode()) return MOCK_MODEL;
   if (mode === "create") return MODEL_GEN;
   if (mode === "fix" || mode === "explain") return MODEL_LITE;
+  if (mode === "plan") return MODEL_GEN;
   return prompt.trim().length <= 25 ? MODEL_LITE : MODEL_GEN;
 }
 
@@ -85,19 +86,64 @@ const EXPLAIN_RULES = `너는 '만들랩'의 친절한 코딩 선생님이다. �
 사용자가 가진 웹 앱 코드에 대한 질문에 한국어로 쉽고 짧게(10줄 이내) 답한다. 필요하면 코드의 짧은 일부를 인용해도 되지만 전체 코드를 다시 쓰지 않는다.
 비유를 쓰고, 전문 용어가 나오면 괄호로 풀어 쓴다.`;
 
+const PLAN_RULES = `너는 '만들랩'의 친절한 앱 기획 도우미다. 사용자는 코딩을 모르는 직장인·대학생이며, 무엇을 어떻게 만들지 아이디어가 아직 적다.
+짧은 대화로 아이디어를 구체화해서, 파일 하나로 된 웹 앱(HTML) 설계안을 함께 만든다.
+
+[출력] 반드시 아래 모양의 JSON 하나만 출력한다. 다른 글, 코드 블록 표시(\`\`\`)를 쓰지 않는다.
+{
+  "message": "사용자 생각에 공감하고 지금 무엇을 하는지 알려주는 1~2문장",
+  "questions": [
+    { "id": "q1", "question": "쉬운 말로 된 질문", "type": "single", "options": ["보기1", "보기2", "보기3"], "allowOther": true }
+  ],
+  "plan": null
+}
+- type: 하나만 고르면 "single", 여러 개 고를 수 있으면 "multi", 직접 적어야 하면 "text"(options는 빈 배열)
+- allowOther: 보기에 없는 답을 직접 적을 수 있게 하려면 true
+
+[질문하는 법]
+- 한 번에 질문 2~4개, 보기는 3~5개. 고르기 쉬운 구체적인 보기를 준다. 전문 용어를 쓰지 않는다.
+- 중요한 것부터 묻는다: 누가·왜 쓰는지 → 꼭 필요한 기능 → 화면 모습 → 저장·내보내기.
+- 사용자가 이미 말한 내용은 다시 묻지 않는다.
+
+[설계안을 낼 때]
+다음 중 하나면 questions 를 빈 배열로 하고 plan 을 채운다.
+- 사용자의 답변을 두 번 받았을 때 (더 묻지 말고 정리한다)
+- 이미 정보가 충분할 때
+- 사용자가 "바로 만들어", "알아서 해줘", "이대로 정리" 같은 말을 했을 때
+"plan": {
+  "title": "짧은 한국어 앱 이름",
+  "summary": "어떤 앱인지 한두 문장",
+  "features": ["첫 버전에 넣을 핵심 기능 3~6개. 작게 시작한다"],
+  "later": ["나중에 하나씩 추가하면 좋은 기능 2~3개"],
+  "prompt": "제작 AI에게 그대로 보낼 구체적인 한국어 제작 지시문 (300~800자). 화면 구성, 기능, 저장 방식(localStorage 등), 디자인 분위기를 담는다."
+}
+
+[현재 앱이 있을 때]
+- 현재 앱을 바탕으로 무엇을 더하거나 바꿀지 묻는다.
+- plan.prompt 는 현재 앱을 고치는 지시문으로 쓴다 ("지금 앱에 ~을 추가해줘" 식으로).
+
+[거절] 악성코드, 피싱, 불법 목적이면 questions 는 빈 배열, plan 은 null, message 에 정중히 이유를 쓴다.`;
+
 export interface PromptInput {
   mode: GenerateMode;
   prompt: string;
   baseHtml?: string;
   history: string[];
   fullRewrite?: boolean;
+  planHistory?: PlanHistoryItem[];
 }
 
-export function buildPrompt({ mode, prompt, baseHtml, history, fullRewrite }: PromptInput): {
+export function buildPrompt({ mode, prompt, baseHtml, history, fullRewrite, planHistory }: PromptInput): {
   system: string;
   user: string;
 } {
   const hist = history.length ? `[지금까지의 요청]\n${history.map((h, i) => `${i + 1}. ${h}`).join("\n")}\n\n` : "";
+  if (mode === "plan") {
+    const talk = (planHistory ?? []).map((h) => `${h.role === "user" ? "사용자" : "도우미"}: ${h.text}`).join("\n");
+    const app = baseHtml ? `[현재 앱 코드]\n${baseHtml.slice(0, 30000)}\n\n` : "[현재 앱] 아직 없음\n\n";
+    const convo = talk ? `[지금까지의 대화]\n${talk}\n\n` : "";
+    return { system: PLAN_RULES, user: `${app}${convo}[사용자의 새 말]\n${prompt}` };
+  }
   if (mode === "explain") {
     return { system: EXPLAIN_RULES, user: `[현재 코드]\n${baseHtml ?? ""}\n\n[질문]\n${prompt}` };
   }
@@ -133,13 +179,15 @@ export async function callGemini(
   user: string,
   onDelta: (s: string) => void,
   signal?: AbortSignal,
+  json = false,
 ): Promise<AiResult> {
   const thinkingLevel = process.env.GEMINI_THINKING_LEVEL ?? "low";
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: user }] }],
     generationConfig: {
-      maxOutputTokens: 32768,
+      maxOutputTokens: json ? 4096 : 32768,
+      ...(json ? { responseMimeType: "application/json" } : {}),
       ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
     },
   };
@@ -280,4 +328,51 @@ function replaceByTrimmedLines(doc: string, search: string, replace: string): st
 export function extractTitle(html: string): string {
   const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return (m?.[1] ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || "제목 없는 앱";
+}
+
+// ───────────────────────── 질문으로 시작하기 응답 해석 ─────────────────────────
+
+const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const strList = (v: unknown, n: number, max: number) =>
+  Array.isArray(v) ? v.map((x) => str(x, max)).filter(Boolean).slice(0, n) : [];
+
+/** AI가 준 JSON 을 안전한 모양으로 다듬는다. 해석할 수 없으면 null */
+export function parsePlanReply(raw: string): PlanReply | null {
+  const text = raw.replace(/^\s*```[a-zA-Z]*\s*$/gm, "");
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  const questions: PlanQuestion[] = (Array.isArray(data.questions) ? data.questions : [])
+    .slice(0, 5)
+    .map((q: Record<string, unknown>, i: number) => {
+      const type = q.type === "multi" || q.type === "text" ? q.type : "single";
+      return {
+        id: str(q.id, 20) || `q${i + 1}`,
+        question: str(q.question, 200),
+        type,
+        options: type === "text" ? [] : strList(q.options, 6, 80),
+        allowOther: type === "text" ? true : q.allowOther !== false,
+      } as PlanQuestion;
+    })
+    .filter((q: PlanQuestion) => q.question && (q.type === "text" || q.options.length > 0));
+  const p = data.plan as Record<string, unknown> | null | undefined;
+  const plan =
+    p && typeof p === "object" && str(p.prompt, 3000)
+      ? {
+          title: str(p.title, 60) || "나의 앱",
+          summary: str(p.summary, 300),
+          features: strList(p.features, 8, 120),
+          later: strList(p.later, 4, 120),
+          prompt: str(p.prompt, 3000),
+        }
+      : null;
+  const message = str(data.message, 500);
+  if (!message && !questions.length && !plan) return null;
+  return { message, questions: plan ? [] : questions, plan };
 }

@@ -13,21 +13,32 @@ import {
   extractTitle,
   isMockMode,
   parseOutput,
+  parsePlanReply,
   pickModel,
 } from "@/lib/ai";
-import { mockOutput, streamMock } from "@/lib/mock";
-import type { GenerateMode, StreamEvent, Version, VersionMeta } from "@/lib/types";
+import { mockOutput, mockPlan, streamMock } from "@/lib/mock";
+import type { GenerateMode, PlanHistoryItem, StreamEvent, Version, VersionMeta } from "@/lib/types";
 
 export const maxDuration = 300;
 
-const MODES: GenerateMode[] = ["create", "edit", "fix", "explain"];
+const MODES: GenerateMode[] = ["create", "edit", "fix", "explain", "plan"];
 
 export async function POST(req: Request) {
   const me = await currentParticipant();
   if (!me) return Response.json({ error: "다시 입장해 주세요." }, { status: 401 });
   const { participant, session } = me;
 
-  const body = (await req.json().catch(() => ({}))) as { mode?: string; prompt?: string; baseVersionId?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    mode?: string;
+    prompt?: string;
+    baseVersionId?: string;
+    planHistory?: PlanHistoryItem[];
+  };
+  // 질문으로 시작하기 대화 기록 (최근 12개, 각 1,500자까지)
+  const planHistory: PlanHistoryItem[] = (Array.isArray(body.planHistory) ? body.planHistory : [])
+    .slice(-12)
+    .map((h) => ({ role: h?.role === "ai" ? ("ai" as const) : ("user" as const), text: String(h?.text ?? "").slice(0, 1500) }))
+    .filter((h) => h.text);
   const prompt = String(body.prompt ?? "").trim().slice(0, 4000);
   let mode = (MODES.includes(body.mode as GenerateMode) ? body.mode : "edit") as GenerateMode;
   if (!prompt) return Response.json({ error: "무엇을 만들지 적어 주세요." }, { status: 400 });
@@ -52,7 +63,7 @@ export async function POST(req: Request) {
   const base = baseId
     ? (await db().prepare("SELECT * FROM versions WHERE id = ? AND participant_id = ?").get(baseId, participant.id) as Version | undefined)
     : undefined;
-  if (!base && mode !== "create") mode = mode === "explain" ? "explain" : "create";
+  if (!base && mode !== "create" && mode !== "plan") mode = mode === "explain" ? "explain" : "create";
   if (mode === "explain" && !base) return Response.json({ error: "설명할 앱이 아직 없어요." }, { status: 400 });
 
   const history = (
@@ -85,15 +96,21 @@ export async function POST(req: Request) {
 
       const release = await acquireSlot((pos) => send({ t: "status", d: `차례를 기다리는 중… (앞에 ${pos}명)` }));
       try {
-        send({ t: "status", d: mode === "explain" ? "코드를 읽는 중…" : mode === "create" ? "앱을 만드는 중…" : "고치는 중…" });
+        send({
+          t: "status",
+          d: mode === "plan" ? "생각을 정리하는 중…" : mode === "explain" ? "코드를 읽는 중…" : mode === "create" ? "앱을 만드는 중…" : "고치는 중…",
+        });
 
         const run = async (fullRewrite: boolean): Promise<AiResult & { model: string }> => {
           const model = pickModel(mode, prompt);
-          const { system, user } = buildPrompt({ mode, prompt, baseHtml: base?.html, history, fullRewrite });
-          const onDelta = (d: string) => send({ t: "delta", d });
-          const r = isMockMode()
-            ? await streamMock(mockOutput(mode, prompt, base?.html, fullRewrite), onDelta)
-            : await callGemini(model, system, user, onDelta);
+          const { system, user } = buildPrompt({ mode, prompt, baseHtml: base?.html, history, fullRewrite, planHistory });
+          // 질문 모드의 JSON 은 화면에 흘려 보여주지 않는다
+          const onDelta = mode === "plan" ? () => {} : (d: string) => send({ t: "delta", d });
+          const mock = () =>
+            mode === "plan"
+              ? mockPlan(prompt, planHistory.filter((h) => h.role === "user").length, Boolean(base))
+              : mockOutput(mode, prompt, base?.html, fullRewrite);
+          const r = isMockMode() ? await streamMock(mock(), onDelta) : await callGemini(model, system, user, onDelta, undefined, mode === "plan");
           await db()
             .prepare(
               "INSERT INTO usage (session_id, participant_id, model, input_tokens, output_tokens, cost_usd, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -101,6 +118,14 @@ export async function POST(req: Request) {
             .run(session.id, participant.id, model, r.inputTokens, r.outputTokens, costUsd(model, r.inputTokens, r.outputTokens), now());
           return { ...r, model };
         };
+
+        if (mode === "plan") {
+          const plan = parsePlanReply((await run(false)).text);
+          if (!plan) throw new AiError("unparseable plan", "AI 답변을 정리하지 못했어요. 한 번 더 보내 주세요.");
+          await addLog(session.id, participant.id, "plan", plan.plan ? `설계안: ${plan.plan.title}` : prompt);
+          send({ t: "done", plan, summary: "", remaining: remainingAfter });
+          return;
+        }
 
         if (mode === "explain") {
           const r = await run(false);
