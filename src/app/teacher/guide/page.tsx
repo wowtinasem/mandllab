@@ -6,6 +6,8 @@ import Logo from "@/components/Logo";
 import { api } from "@/lib/client";
 import type { Instructor } from "@/lib/types";
 
+const TOC_KEY = "ml:guideToc";
+
 const SECTIONS = [
   ["prepare", "1. 수업 전 준비"],
   ["create", "2. 수업 만들기"],
@@ -23,12 +25,54 @@ const SECTIONS = [
 /** 강사용 사용 가이드. 강사(또는 메인 관리자)로 로그인했을 때만 보인다. 큰 글씨, 합니다체 */
 export default function TeacherGuide() {
   const [me, setMe] = useState<Instructor | null | undefined>(undefined);
+  // 왼쪽 목차: 열고 닫은 상태는 이 브라우저에 기억한다. 처음에는 넓은 화면에서만 열어 둔다
+  const [tocOpen, setTocOpen] = useState(false);
+  const [active, setActive] = useState<string>(SECTIONS[0][0]);
 
   useEffect(() => {
     api<{ instructor: Instructor | null }>("/api/instructor/me")
       .then((r) => setMe(r.instructor))
       .catch(() => setMe(null));
   }, []);
+
+  useEffect(() => {
+    let open = window.matchMedia("(min-width: 1024px)").matches;
+    try {
+      const saved = localStorage.getItem(TOC_KEY);
+      if (saved === "open" || saved === "closed") open = saved === "open";
+    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 화면 너비와 저장값은 브라우저에서만 알 수 있다
+    setTocOpen(open);
+  }, []);
+
+  // 지금 읽고 있는 장을 목차에 표시
+  useEffect(() => {
+    if (!me) return;
+    const els = SECTIONS.map(([id]) => document.getElementById(id)).filter((e): e is HTMLElement => Boolean(e));
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActive(visible[0].target.id);
+      },
+      { rootMargin: "-90px 0px -60% 0px" },
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [me]);
+
+  const toggleToc = (open: boolean) => {
+    setTocOpen(open);
+    try {
+      localStorage.setItem(TOC_KEY, open ? "open" : "closed");
+    } catch {}
+  };
+
+  const goTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActive(id);
+    // 좁은 화면에서는 목차가 본문을 가리므로 고르면 닫는다
+    if (!window.matchMedia("(min-width: 1024px)").matches) setTocOpen(false);
+  };
 
   if (me === undefined) return <div className="grid min-h-screen place-items-center text-muted">불러오는 중…</div>;
   if (!me)
@@ -45,19 +89,75 @@ export default function TeacherGuide() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur print:hidden">
-        <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3">
+      <header className="sticky top-0 z-30 h-[65px] border-b border-line bg-surface/95 backdrop-blur print:hidden">
+        <div className="flex h-full items-center gap-3 px-4">
+          <button
+            className={`${tocOpen ? "btn-primary" : "btn-ghost"} shrink-0 whitespace-nowrap py-2 text-base`}
+            onClick={() => toggleToc(!tocOpen)}
+            aria-expanded={tocOpen}
+            aria-controls="guide-toc"
+          >
+            ☰ 목차<span className="hidden sm:inline"> {tocOpen ? "닫기" : "열기"}</span>
+          </button>
           <Logo href="/teacher" />
-          <span className="flex-1 text-base font-semibold text-muted">강사 사용 가이드</span>
-          <button className="btn-ghost py-2 text-base" onClick={() => window.print()}>
+          <span className="flex-1 truncate text-base font-semibold text-muted">
+            <span className="hidden sm:inline">강사 사용 가이드</span>
+          </span>
+          <button className="btn-ghost hidden py-2 text-base sm:inline-flex" onClick={() => window.print()}>
             🖨 인쇄
           </button>
-          <Link href="/teacher" className="btn-primary py-2 text-base">
-            ← 수업 목록
+          <Link href="/teacher" className="btn-primary shrink-0 whitespace-nowrap py-2 text-base">
+            ← <span className="hidden sm:inline">수업 </span>목록
           </Link>
         </div>
       </header>
 
+      {/* 왼쪽 목차 서랍 */}
+      {tocOpen && (
+        <div className="fixed inset-0 top-[65px] z-10 bg-black/30 lg:hidden print:hidden" onClick={() => toggleToc(false)} aria-hidden />
+      )}
+      <aside
+        id="guide-toc"
+        aria-label="가이드 목차"
+        className={`fixed top-[65px] bottom-0 left-0 z-20 w-[360px] max-w-[85vw] overflow-y-auto border-r border-line bg-surface p-5 shadow-lg transition-transform duration-200 lg:shadow-none print:hidden ${
+          tocOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-[24px] font-bold">목차</span>
+          <button className="rounded-lg px-2 py-1 text-[22px] text-muted hover:bg-surface-2 hover:text-ink" onClick={() => toggleToc(false)} aria-label="목차 닫기">
+            ✕
+          </button>
+        </div>
+        <ol className="space-y-1">
+          {SECTIONS.map(([id, label]) => (
+            <li key={id}>
+              <button
+                onClick={() => goTo(id)}
+                aria-current={active === id ? "true" : undefined}
+                className={`block w-full rounded-xl px-3 py-2 text-left text-[22px] leading-snug transition ${
+                  active === id ? "bg-accent-soft font-bold text-accent" : "text-muted hover:bg-surface-2 hover:text-ink"
+                }`}
+              >
+                {label}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </aside>
+
+      {/* 목차를 닫아 두었을 때 왼쪽 가장자리의 여는 탭 */}
+      {!tocOpen && (
+        <button
+          onClick={() => toggleToc(true)}
+          className="fixed top-1/3 left-0 z-20 rounded-r-2xl border border-l-0 border-line bg-surface px-3 py-5 text-[20px] font-bold text-accent shadow-md hover:bg-accent-soft print:hidden [writing-mode:vertical-rl]"
+          aria-label="목차 열기"
+        >
+          📑 목차
+        </button>
+      )}
+
+      <div className={`transition-[padding] duration-200 ${tocOpen ? "lg:pl-[360px]" : ""}`}>
       <article className="guide mx-auto max-w-[1400px] space-y-20 px-4 py-12 text-[30px] leading-relaxed sm:px-8">
         <div>
           <h1 className="text-[60px] font-extrabold leading-tight tracking-tight">만들랩 강사 사용 가이드</h1>
@@ -72,18 +172,6 @@ export default function TeacherGuide() {
           </div>
         </div>
 
-        <nav className="card p-8 print:hidden" aria-label="가이드 목차">
-          <div className="mb-4 text-[28px] font-bold text-muted">목차</div>
-          <ol className="grid gap-x-8 gap-y-2 text-[28px] lg:grid-cols-2">
-            {SECTIONS.map(([id, label]) => (
-              <li key={id}>
-                <a href={`#${id}`} className="block rounded-xl px-3 py-1.5 hover:bg-surface-2 hover:text-accent">
-                  {label}
-                </a>
-              </li>
-            ))}
-          </ol>
-        </nav>
 
         <Section id="prepare" title="1. 수업 전 준비">
           <Steps
@@ -335,6 +423,7 @@ export default function TeacherGuide() {
 
         <p className="border-t border-line pt-8 text-center text-[24px] text-muted">Copyright © (주)드림정보</p>
       </article>
+      </div>
     </div>
   );
 }
