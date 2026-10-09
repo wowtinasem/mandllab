@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Preview from "@/components/Preview";
+import QrCode, { joinUrl } from "@/components/QrCode";
 import { api } from "@/lib/client";
 import type { Session } from "@/lib/types";
 
@@ -16,7 +17,7 @@ export default function Present({ params }: { params: Promise<{ id: string }> })
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 접속 주소
-    setOrigin(window.location.host);
+    setOrigin(window.location.origin);
     const load = () => api<Dash>(`/api/sessions/${id}`).then(setD).catch(() => {});
     load();
     const t = setInterval(load, 3000);
@@ -59,11 +60,19 @@ export default function Present({ params }: { params: Promise<{ id: string }> })
   return (
     <div className="flex h-dvh flex-col items-center justify-center gap-8 bg-bg p-8 text-center">
       <div className="text-3xl font-bold text-muted">{s.title}</div>
-      <div>
-        <div className="text-2xl text-muted">
-          <b className="text-ink">{origin}</b> 에 접속해서 코드를 입력하세요
+      <div className="flex flex-wrap items-center justify-center gap-x-16 gap-y-8">
+        <div>
+          <div className="text-2xl text-muted">
+            <b className="text-ink">{origin.replace(/^https?:\/\//, "")}</b> 에 접속해서 코드를 입력하세요
+          </div>
+          <div className="mt-6 font-mono text-[clamp(4rem,12vw,11rem)] font-black leading-none tracking-[0.2em] text-accent">{s.code}</div>
         </div>
-        <div className="mt-6 font-mono text-[clamp(4rem,16vw,12rem)] font-black leading-none tracking-[0.2em] text-accent">{s.code}</div>
+        {origin && s.status === "active" && (
+          <div className="flex flex-col items-center gap-3">
+            <QrCode text={joinUrl(origin, s.code)} className="w-[min(32vh,28vw)] shadow-lg" label={`강의 코드 ${s.code} 입장 QR 코드`} />
+            <div className="text-xl font-semibold text-muted">📱 휴대폰 카메라로 찍으면 바로 입장</div>
+          </div>
+        )}
       </div>
       {s.status !== "active" ? (
         <div className="rounded-full bg-warn-soft px-6 py-2 text-xl font-semibold text-warn">수업이 종료되었어요</div>

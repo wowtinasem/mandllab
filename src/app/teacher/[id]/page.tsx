@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import Preview from "@/components/Preview";
+import QrCode, { joinUrl } from "@/components/QrCode";
 import MessagePopup from "@/components/MessagePopup";
 import AskAdminButton from "@/components/AskAdminButton";
 import { api, formatDateTime, timeAgo } from "@/lib/client";
@@ -63,6 +64,16 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
   const [viewing, setViewing] = useState<{ title: string; nickname: string; versionId: string; html: string } | null>(null);
   const [mission, setMission] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // QR 화면은 Esc 로 닫는다
+  useEffect(() => {
+    if (!showQr) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setShowQr(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showQr]);
 
   const load = useCallback(async () => {
     try {
@@ -137,6 +148,9 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
             <div className="font-mono text-2xl font-extrabold tracking-[0.25em] text-accent">{s.code}</div>
           </div>
           <AskAdminButton />
+          <button className="btn-ghost" onClick={() => setShowQr(true)} title="학생 입장 QR 코드를 화면에 크게 띄웁니다">
+            📱 QR 코드
+          </button>
           <Link href="/teacher/guide" target="_blank" className="btn-ghost" title="강사 사용 가이드 (새 창)">
             📖 가이드
           </Link>
@@ -385,6 +399,47 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
           </>
         )}
       </main>
+
+      {showQr && (
+        <div
+          className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-6 bg-bg p-6 text-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="학생 입장 QR 코드"
+        >
+          <div className="text-2xl font-bold text-muted sm:text-3xl">{s.title}</div>
+          <QrCode
+            text={joinUrl(window.location.origin, s.code)}
+            className="w-[min(62vh,86vw)] shadow-xl ring-1 ring-line"
+            label={`강의 코드 ${s.code} 입장 QR 코드`}
+          />
+          <div>
+            <div className="text-xl font-semibold sm:text-2xl">📱 휴대폰 카메라로 찍으면 바로 입장해요</div>
+            <div className="mt-2 text-lg text-muted sm:text-xl">
+              또는 <b className="text-ink">{window.location.host}</b> 에서 강의 코드{" "}
+              <b className="font-mono text-2xl tracking-[0.2em] text-accent sm:text-3xl">{s.code}</b>
+            </div>
+          </div>
+          {s.status !== "active" && <div className="rounded-full bg-warn-soft px-5 py-2 font-semibold text-warn">수업이 종료되어 지금은 입장할 수 없어요</div>}
+          <div className="flex gap-2">
+            <button
+              className="btn-ghost"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(joinUrl(window.location.origin, s.code));
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 1500);
+                } catch {}
+              }}
+            >
+              {copiedLink ? "✓ 복사됨" : "🔗 입장 링크 복사"}
+            </button>
+            <button className="btn-primary px-8" onClick={() => setShowQr(false)} autoFocus>
+              닫기 (Esc)
+            </button>
+          </div>
+        </div>
+      )}
 
       {viewing && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/50 p-4 sm:p-8" onClick={() => setViewing(null)}>
