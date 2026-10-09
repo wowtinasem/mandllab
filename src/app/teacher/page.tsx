@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import AdminPanel from "@/components/AdminPanel";
 import MessagePopup from "@/components/MessagePopup";
+import AskAdminButton from "@/components/AskAdminButton";
 import { api, formatDateTime } from "@/lib/client";
 import type { Instructor, Session } from "@/lib/types";
 import { formatPhoneInput } from "@/lib/phone";
@@ -165,7 +166,7 @@ function SessionList({
   onLogout: () => void;
 }) {
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
-  const [form, setForm] = useState({ title: "", perLimit: 60, costCapUsd: 25, capacity: 45, durationMin: 270 });
+  const [form, setForm] = useState({ title: "", perLimit: 60, costCapUsd: 25, capacity: 45, durationMin: 240 });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -207,6 +208,7 @@ function SessionList({
             {instructor.name}
             {instructor.org && ` · ${instructor.org}`}
           </span>
+          <AskAdminButton className="btn-ghost py-1.5" />
           <Link href="/teacher/guide" className="btn-primary py-1.5">
             📖 사용 가이드
           </Link>
@@ -279,10 +281,10 @@ function SessionList({
             <NumField id="perLimit" label="1인 요청 한도" value={form.perLimit} onChange={num("perLimit")} />
             <NumField id="capacity" label="정원" value={form.capacity} onChange={num("capacity")} />
             <NumField id="cost" label="비용 상한 (USD)" value={form.costCapUsd} onChange={num("costCapUsd")} step={0.5} />
-            <NumField id="dur" label="진행 시간 (분)" value={form.durationMin} onChange={num("durationMin")} />
+            <NumField id="dur" label="진행 시간 (분, 최대 240)" value={form.durationMin} onChange={num("durationMin")} max={240} />
           </div>
           <p className="text-xs text-muted">
-            진행 시간이 지나면 자동으로 종료되고, 종료 7일 뒤 결과물과 기록이 삭제돼요. 코드는 다시 발급되지 않아요.
+            수업은 최대 4시간이에요. 진행 시간이 지나면 자동으로 종료되고, 학생은 종료 뒤 7일 동안 결과물을 내려받을 수 있어요. 코드는 다시 발급되지 않아요.
           </p>
           {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
           <button className="btn-primary w-full py-3" disabled={creating || !form.title.trim()}>
@@ -334,6 +336,7 @@ function NumField(props: {
   label: string;
   value: number;
   step?: number;
+  max?: number;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
@@ -341,7 +344,7 @@ function NumField(props: {
       <label htmlFor={props.id} className="label text-xs">
         {props.label}
       </label>
-      <input id={props.id} type="number" min={0} step={props.step ?? 1} className="input" value={props.value} onChange={props.onChange} />
+      <input id={props.id} type="number" min={0} max={props.max} step={props.step ?? 1} className="input" value={props.value} onChange={props.onChange} />
     </div>
   );
 }

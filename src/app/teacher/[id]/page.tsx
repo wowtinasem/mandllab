@@ -5,6 +5,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import Preview from "@/components/Preview";
 import MessagePopup from "@/components/MessagePopup";
+import AskAdminButton from "@/components/AskAdminButton";
 import { api, formatDateTime, timeAgo } from "@/lib/client";
 import type { Session } from "@/lib/types";
 
@@ -135,6 +136,7 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
             <div className="text-xs text-muted">강의 코드</div>
             <div className="font-mono text-2xl font-extrabold tracking-[0.25em] text-accent">{s.code}</div>
           </div>
+          <AskAdminButton />
           <Link href="/teacher/guide" target="_blank" className="btn-ghost" title="강사 사용 가이드 (새 창)">
             📖 가이드
           </Link>

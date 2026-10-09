@@ -8,6 +8,10 @@ const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
 export const DOWNLOAD_GRACE_MS = 7 * 24 * 3600 * 1000;
 
+/** 수업 한 번은 최대 4시간. 수업을 만든 시각부터 셈하며, 그 안에서는 강사가 자유롭게 진행·연장한다 */
+export const MAX_CLASS_MIN = 240;
+export const classDeadline = (createdAt: number) => createdAt + MAX_CLASS_MIN * 60_000;
+
 function randomCode(len: number): string {
   const bytes = crypto.randomBytes(len);
   let out = "";

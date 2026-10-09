@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import MessagePopup from "@/components/MessagePopup";
+import AskAdminButton from "@/components/AskAdminButton";
 import { api } from "@/lib/client";
 import type { Instructor } from "@/lib/types";
 
@@ -12,7 +13,7 @@ const TOC_KEY = "ml:guideToc";
 const SECTIONS = [
   ["prepare", "1. 수업 전 준비"],
   ["create", "2. 수업 만들기"],
-  ["timeline", "3. 수업 당일 진행 순서 (4시간)"],
+  ["timeline", "3. 수업 당일 진행 순서 (예시)"],
   ["join", "4. 학생 입장시키기"],
   ["student", "5. 학생 화면 기능"],
   ["dashboard", "6. 강사 대시보드 사용법"],
@@ -105,6 +106,7 @@ export default function TeacherGuide() {
           <span className="flex-1 truncate text-base font-semibold text-muted">
             <span className="hidden sm:inline">강사 사용 가이드</span>
           </span>
+          <AskAdminButton className="btn-ghost shrink-0 whitespace-nowrap py-2 text-base" />
           <button className="btn-ghost hidden py-2 text-base sm:inline-flex" onClick={() => window.print()}>
             🖨 인쇄
           </button>
@@ -211,10 +213,10 @@ export default function TeacherGuide() {
             head={["칸", "뜻", "다 차면", "권장값"]}
             rows={[
               ["수업 이름", "학생 화면·발표 화면·보고서에 표시됩니다", "-", "예: 영업팀 업무 자동화 워크숍"],
-              ["1인 요청 한도", "학생 한 명이 AI에게 만들기·고치기·질문을 보낼 수 있는 횟수입니다", "그 학생만 AI 요청이 막힙니다 (코드 직접 수정은 가능)", "4시간 수업 50~60회 (기본값 60회)"],
+              ["1인 요청 한도", "학생 한 명이 AI에게 만들기·고치기·질문을 보낼 수 있는 횟수입니다", "그 학생만 AI 요청이 막힙니다 (코드 직접 수정은 가능)", "기본값 60회 (4시간 수업 기준)"],
               ["정원", "코드로 들어올 수 있는 최대 인원입니다", "새 입장이 막힙니다", "예상 인원 + 10%"],
               ["비용 상한 (USD)", "이 수업 전체의 AI 사용료 한도입니다", "수업 전원의 AI 요청이 멈춥니다", "아래 계산 참고"],
-              ["진행 시간 (분)", "만든 순간부터 이 시간이 지나면 자동으로 종료됩니다", "더 만들 수 없고 다운로드만 가능합니다", "4시간 수업이면 270분 (수업 시간 + 30분, 기본값). 0이면 자동 종료 없음"],
+              ["진행 시간 (분)", "만든 순간부터 이 시간이 지나면 자동으로 종료됩니다. 수업은 최대 4시간(240분)입니다", "더 만들 수 없고 7일 동안 다운로드만 가능합니다", "기본값 240분. 수업에 맞게 줄여도 됩니다"],
             ]}
           />
           <h3 className="pt-4 text-[34px] font-bold">비용 상한 정하기</h3>
@@ -236,30 +238,108 @@ export default function TeacherGuide() {
           </Tip>
         </Section>
 
-        <Section id="timeline" title="3. 수업 당일 진행 순서 (4시간 예시)">
+        <Section id="timeline" title="3. 수업 당일 진행 순서 (예시)">
           <p>
-            4시간(240분) 수업을 기준으로 한 예시입니다. 수업을 만들 때 <b>진행 시간은 270분</b>(수업 4시간 + 여유 30분)으로 두면 수업이 끝난 뒤 다운로드할
-            시간까지 확보됩니다.
+            수업은 <b>최대 4시간</b> 안에서 강사의 재량으로 자유롭게 진행하시면 됩니다. 아래는 시간표가 아니라 <b>권장하는 순서</b>이며, 순서를 바꾸거나
+            건너뛰어도 됩니다.
           </p>
-          <Table
-            head={["시간", "할 일", "강사 화면에서"]}
-            rows={[
-              ["수업 전", "수업 만들기, 발표 화면 띄우기", "새 수업 만들기(진행 시간 270분) → 📺 발표 화면"],
-              ["0~10분", "학생 입장, 사용법 소개", "발표 화면의 주소·코드를 안내하고, 9번 “좋은 요청 작성법”을 함께 읽습니다"],
-              ["10~40분", "첫 앱 만들기", "미션 방송: “시작 카드를 하나 골라 첫 앱을 만들어 보세요”"],
-              ["40~80분", "고치기 연습", "미션: “색과 글자 크기를 내 취향대로”, “휴대폰에서도 보기 좋게”. 🆘 학생을 돕습니다"],
-              ["80~90분", "쉬는 시간", "✋ 전체 일시정지 (쉬는 동안 요청이 나가지 않습니다)"],
-              ["90~120분", "내 업무·과제 앱 기획", "미션: “💬 질문하며 정하기로 내 앱 설계안을 만들어 보세요”"],
-              ["120~180분", "내 앱 만들기와 확장", "미션: “표나 차트를 넣어 보세요”, “새로고침해도 데이터가 남게”. 좋은 사례를 📺 띄웁니다"],
-              ["180~190분", "쉬는 시간", "✋ 전체 일시정지, 요청을 다 쓴 학생은 +5회"],
-              ["190~220분", "다듬기와 오류 고치기", "미션: “완성한 앱을 갤러리에 올려 보세요”, 비용 막대 확인"],
-              ["220~235분", "갤러리 발표", "갤러리에서 📺를 눌러 한 명씩 발표 화면에 띄웁니다"],
-              ["235~240분", "다운로드와 마무리", "HTML 다운로드를 안내한 뒤 ■ 수업 종료 → 사용량 보고서·갤러리 ZIP을 받습니다"],
+          <div className="flex flex-wrap gap-4 text-[26px]">
+            <span className="flex items-center gap-2">
+              <Badge kind="must" /> 수업을 원활하게 진행하기 위해 권장하는 단계
+            </span>
+            <span className="flex items-center gap-2">
+              <Badge kind="option" /> 수업 상황에 따라 골라서 하는 단계
+            </span>
+          </div>
+          <Tip>
+            <b>필수</b>로 표시한 단계도 하지 않는다고 해서 학생의 앱 제작이 막히지는 않습니다. 학생은 강의 코드만 있으면 언제든 앱을 만들고 고치고
+            내려받을 수 있습니다.
+          </Tip>
+
+          <Order
+            items={[
+              {
+                kind: "start",
+                title: "수업 만들기와 강의 코드 알리기",
+                body: (
+                  <>
+                    새 수업을 만들어 강의 코드를 받고 학생에게 알려 줍니다. 학생이 들어오려면 강의 코드가 있어야 하므로 이 단계만은 꼭 필요합니다. 코드는
+                    <b> 📺 발표 화면</b>, 칠판, 메신저 등 편한 방법으로 알리시면 됩니다.
+                  </>
+                ),
+              },
+              {
+                kind: "must",
+                title: "학생 입장 확인과 복귀 코드 안내",
+                body: (
+                  <>
+                    진행 현황에서 입장 인원을 확인하고, 학생에게 <b>복귀 코드를 적어 두도록</b> 안내합니다. 안내하지 않아도 같은 기기에서는 계속 만들 수
+                    있습니다.
+                  </>
+                ),
+              },
+              {
+                kind: "must",
+                title: "좋은 요청 작성법 함께 읽기",
+                body: <>9번 &ldquo;좋은 요청 작성법&rdquo;을 화면에 띄워 함께 읽습니다. 처음 써 보는 학생이 덜 막힙니다.</>,
+              },
+              {
+                kind: "must",
+                title: "첫 앱 만들기",
+                body: (
+                  <>
+                    시작 카드나 자유 설명으로 첫 앱을 만들게 합니다. 미션 방송 예: &ldquo;시작 카드를 하나 골라 첫 앱을 만들어 보세요&rdquo;
+                  </>
+                ),
+              },
+              {
+                kind: "option",
+                title: "고치기 연습",
+                body: <>&ldquo;색과 글자 크기를 내 취향대로&rdquo;, &ldquo;휴대폰에서도 보기 좋게&rdquo; 같은 간단한 수정으로 말로 고치는 감각을 익힙니다.</>,
+              },
+              {
+                kind: "option",
+                title: "💬 질문으로 시작하기로 내 앱 기획",
+                body: <>업무·과제에 쓸 앱 아이디어가 막연할 때, AI의 질문에 답하며 설계안을 만들고 &ldquo;🚀 이대로 만들기&rdquo;로 제작합니다.</>,
+              },
+              {
+                kind: "must",
+                title: "내 앱 만들기와 확장",
+                body: <>표·차트, 저장, CSV 내려받기처럼 실제로 쓸 기능을 더해 갑니다. 🆘 표시가 뜬 학생을 먼저 도와주십시오.</>,
+              },
+              {
+                kind: "option",
+                title: "쉬는 시간",
+                body: <>필요하면 ✋ 전체 일시정지로 잠시 멈춥니다. 일시정지를 쓰지 않아도 됩니다.</>,
+              },
+              {
+                kind: "option",
+                title: "갤러리 공유와 발표",
+                body: <>학생이 앱을 갤러리에 올리고, 강사가 📺로 하나씩 발표 화면에 띄워 함께 봅니다. 다른 학생 앱을 🔁 리믹스해 볼 수도 있습니다.</>,
+              },
+              {
+                kind: "must",
+                title: "HTML 다운로드 안내",
+                body: (
+                  <>
+                    학생에게 ⬇ 다운로드로 앱 파일을 받도록 안내합니다. 안내를 놓쳐도 학생은 수업 종료 뒤 <b>7일 동안</b> 복귀 코드로 다시 들어와
+                    내려받을 수 있습니다.
+                  </>
+                ),
+              },
+              {
+                kind: "option",
+                title: "수업 종료와 기록 받기",
+                body: (
+                  <>
+                    ■ 수업 종료를 누르고 📄 사용량 보고서와 🗂 갤러리 ZIP을 받습니다. 누르지 않아도 진행 시간이 지나면 <b>자동으로 종료</b>됩니다.
+                  </>
+                ),
+              },
             ]}
           />
           <Tip>
-            설명하실 때는 <b>✋ 전체 일시정지</b>를 누르십시오. 학생 화면이 잠기고 &ldquo;잠시 화면을 봐 주세요&rdquo;가 표시됩니다. 수업이 길어지면
-            대시보드의 <b>+30분 연장</b>으로 자동 종료 시각을 늦출 수 있습니다.
+            수업이 길어지면 대시보드의 <b>+30분 연장</b>으로 종료 시각을 늦출 수 있습니다. 수업을 만든 뒤 <b>최대 4시간</b>까지 연장됩니다.
           </Tip>
         </Section>
 
@@ -322,7 +402,7 @@ export default function TeacherGuide() {
               ["🎯 미션 방송", "모든 학생 화면 위쪽에 과제를 띄웁니다. 자주 쓰는 미션은 버튼으로 한 번에 보낼 수 있습니다"],
               ["✋ 전체 일시정지", "설명할 때 학생 입력을 잠급니다. 다시 누르면 풀립니다"],
               ["🔒 입장 잠금", "새 학생이 들어오지 못하게 합니다. 이미 들어온 학생은 그대로입니다"],
-              ["+30분 연장", "자동 종료 시각을 30분 늦춥니다"],
+              ["+30분 연장", "자동 종료 시각을 30분 늦춥니다 (수업을 만든 뒤 최대 4시간까지)"],
               ["⚙ 한도 설정", "1인 요청 한도, 비용 상한, 정원을 수업 중에 바꿉니다"],
               ["AI 비용", "지금까지 쓴 금액과 상한 대비 막대를 보여 줍니다. 빨갛게 되면 상한을 올리십시오"],
               ["갤러리 / 활동 기록", "학생이 올린 앱과 생성·수정·차단 등 모든 활동을 보여 줍니다"],
@@ -393,7 +473,7 @@ export default function TeacherGuide() {
             head={["상황", "해결"]}
             rows={[
               ["“강의 코드를 다시 확인해 주세요”", "코드 6자리를 다시 확인합니다. 삭제된 수업이거나 다른 수업의 코드일 수 있습니다"],
-              ["“이미 끝난 수업이에요”", "수업이 종료된 상태입니다. 대시보드에서 ▶ 수업 재개 또는 +30분 연장을 누릅니다"],
+              ["“이미 끝난 수업이에요”", "수업이 종료된 상태입니다. 4시간 안이라면 대시보드에서 ▶ 수업 재개를 누릅니다. 4시간이 지났다면 새 수업을 만들어 주십시오"],
               ["“정원이 다 찼어요”", "⚙ 한도 설정에서 정원을 늘립니다"],
               ["“강사가 입장을 잠가 두었어요”", "🔓 입장 잠금 해제를 누릅니다"],
               ["학생 요청 횟수를 다 씀", "학생 줄의 +5회를 누릅니다. 학생은 코드 탭에서 직접 고칠 수도 있습니다"],
@@ -436,6 +516,35 @@ function Section({ id, title, children }: { id: string; title: string; children:
       <h2 className="border-b-2 border-line pb-3 text-[40px] font-bold">{title}</h2>
       {children}
     </section>
+  );
+}
+
+type OrderKind = "start" | "must" | "option";
+
+function Badge({ kind }: { kind: OrderKind }) {
+  const style =
+    kind === "start" ? "bg-ink text-bg" : kind === "must" ? "bg-accent text-accent-fg" : "border-2 border-line bg-surface text-muted";
+  const label = kind === "start" ? "시작" : kind === "must" ? "필수" : "선택";
+  return <span className={`inline-block shrink-0 rounded-lg px-3 py-0.5 text-[22px] font-bold ${style}`}>{label}</span>;
+}
+
+/** 수업 진행 순서: 번호 + 필수/선택 표시 */
+function Order({ items }: { items: { kind: OrderKind; title: string; body: React.ReactNode }[] }) {
+  return (
+    <ol className="space-y-4">
+      {items.map((it, i) => (
+        <li key={i} className={`card flex gap-5 p-6 ${it.kind === "option" ? "bg-surface-2/40" : ""}`}>
+          <span className="mt-1 grid h-12 w-12 shrink-0 place-items-center rounded-full bg-accent-soft text-[24px] font-bold text-accent">{i + 1}</span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge kind={it.kind} />
+              <b className="text-[30px]">{it.title}</b>
+            </div>
+            <div className="mt-2 text-[28px] text-muted">{it.body}</div>
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 

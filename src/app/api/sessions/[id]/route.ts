@@ -1,7 +1,7 @@
 import { ownedSession } from "@/lib/auth";
 import { db, now } from "@/lib/db";
 import { bad, clampInt, readJson, str } from "@/lib/http";
-import { DOWNLOAD_GRACE_MS, addLog, expireSession, refreshSession } from "@/lib/sessions";
+import { DOWNLOAD_GRACE_MS, addLog, classDeadline, expireSession, refreshSession } from "@/lib/sessions";
 import type { Participant } from "@/lib/types";
 
 const STUCK_IDLE_MS = 5 * 60_000;
@@ -106,7 +106,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/sessions/[id]"
     case "resume":
       if (session.status === "ended") {
         // 예정 종료 시각이 지났으면 1시간 연장해서 다시 연다
-        const endsAt = session.ends_at && session.ends_at <= t ? t + 60 * 60_000 : session.ends_at;
+        // 다시 열 때도 수업을 만든 뒤 4시간을 넘길 수 없다
+        const deadline = classDeadline(session.created_at);
+        if (deadline <= t) return bad("수업 시간(최대 4시간)이 지나서 다시 열 수 없어요. 학생은 7일 동안 결과물을 내려받을 수 있어요.", 409);
+        const endsAt = Math.min(session.ends_at && session.ends_at > t ? session.ends_at : t + 60 * 60_000, deadline);
         await set("status = 'active', ended_at = NULL, ends_at = ?", endsAt);
       }
       break;
@@ -130,7 +133,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/sessions/[id]"
     }
     case "extend": {
       const minutes = clampInt(b.minutes, 5, 600, 30);
-      await set("ends_at = ?", Math.max(session.ends_at ?? t, t) + minutes * 60_000);
+      const deadline = classDeadline(session.created_at);
+      const current = Math.max(session.ends_at ?? t, t);
+      if (current >= deadline) return bad("이미 최대 수업 시간(4시간)까지 연장했어요.", 409);
+      await set("ends_at = ?", Math.min(current + minutes * 60_000, deadline));
       break;
     }
     case "settings":

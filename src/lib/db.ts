@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS usage (
 );
 CREATE INDEX IF NOT EXISTS usage_session ON usage(session_id);
 
--- 메인 관리자가 강사에게 보내는 메모. 받는 강사마다 한 줄씩 저장하고, 강사가 확인하면 read_at 을 채운다
+-- 메인 관리자 ↔ 강사 메시지. 받는 사람마다 한 줄씩 저장하고, 받은 사람이 확인하면 read_at 을 채운다
 CREATE TABLE IF NOT EXISTS admin_messages (
   id TEXT PRIMARY KEY,
   batch_id TEXT NOT NULL,              -- 한 번에 여러 명에게 보낸 묶음
@@ -167,14 +167,18 @@ const MIGRATIONS = [
   "ALTER TABLE instructors ADD COLUMN access_code_id TEXT",
   "ALTER TABLE instructors ADD COLUMN phone TEXT",
   "ALTER TABLE instructors ADD COLUMN last_seen INTEGER", // 강사 화면이 마지막으로 열려 있던 시각 (접속 중 표시용)
+  "ALTER TABLE admin_messages ADD COLUMN reply_to TEXT", // 답장이면 원래 메시지 id
 ];
 
 async function migrate(client: Client) {
-  const cols = await client.execute("PRAGMA table_info(instructors)");
-  const have = new Set(cols.rows.map((r) => String(r.name)));
+  const have = new Map<string, Set<string>>();
   for (const sql of MIGRATIONS) {
-    const col = sql.match(/ADD COLUMN (\w+)/)![1];
-    if (!have.has(col)) await client.execute(sql);
+    const [, table, col] = sql.match(/ALTER TABLE (\w+) ADD COLUMN (\w+)/)!;
+    if (!have.has(table)) {
+      const cols = await client.execute(`PRAGMA table_info(${table})`);
+      have.set(table, new Set(cols.rows.map((r) => String(r.name))));
+    }
+    if (!have.get(table)!.has(col)) await client.execute(sql);
   }
 }
 

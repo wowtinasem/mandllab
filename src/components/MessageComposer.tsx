@@ -6,6 +6,15 @@ import { api, formatDateTime } from "@/lib/client";
 type Target = "online" | "teaching" | "all" | "one";
 type Person = { instructorId: string; name: string; online: boolean; teaching: boolean };
 type Sent = { id: string; text: string; created_at: number; to: { name: string; read: boolean }[] };
+type Received = {
+  id: string;
+  text: string;
+  created_at: number;
+  read_at: number | null;
+  from_name: string | null;
+  reply_to_text: string | null;
+  replied: number;
+};
 
 export type MessageComposerHandle = { pick: (instructorId: string) => void };
 
@@ -19,8 +28,33 @@ const MessageComposer = forwardRef<MessageComposerHandle, { people: Person[] }>(
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [sent, setSent] = useState<Sent[]>([]);
+  const [received, setReceived] = useState<Received[]>([]);
+  const [box, setBox] = useState<"received" | "sent">("received");
+  const [replyId, setReplyId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
 
-  const loadSent = useCallback(() => api<{ sent: Sent[] }>("/api/admin/messages").then((r) => setSent(r.sent)), []);
+  const loadSent = useCallback(
+    () =>
+      api<{ sent: Sent[]; received: Received[] }>("/api/admin/messages").then((r) => {
+        setSent(r.sent);
+        setReceived(r.received);
+      }),
+    [],
+  );
+
+  const sendReply = async (m: Received) => {
+    try {
+      await api("/api/instructor/messages", { body: { text: replyText, replyTo: m.id } });
+      // 답장하면 그 메시지는 확인한 것으로 본다
+      if (!m.read_at) await api("/api/instructor/messages", { method: "PATCH", body: { ids: [m.id] } });
+      setReplyId(null);
+      setReplyText("");
+      loadSent();
+    } catch (err) {
+      setNotice({ ok: false, text: (err as Error).message });
+    }
+  };
+  const unread = received.filter((m) => !m.read_at).length;
   useEffect(() => {
     // 마운트 시와 15초마다 확인 현황을 새로 고친다
     loadSent().catch(() => {});
@@ -116,8 +150,27 @@ const MessageComposer = forwardRef<MessageComposerHandle, { people: Person[] }>(
       </form>
 
       <div>
-        <h2 className="mb-3 text-lg font-bold">보낸 메모</h2>
-        {sent.length === 0 ? (
+        <div className="mb-3 flex gap-1 rounded-xl bg-surface-2 p-1 text-sm font-semibold sm:w-fit" role="tablist">
+          <button
+            role="tab"
+            aria-selected={box === "received"}
+            onClick={() => setBox("received")}
+            className={`flex-1 rounded-lg px-4 py-1.5 sm:flex-none ${box === "received" ? "bg-surface text-ink shadow-sm" : "text-muted"}`}
+          >
+            📥 받은 메시지
+            {unread > 0 && <span className="ml-1.5 rounded-full bg-danger px-1.5 py-0.5 text-[11px] text-white">{unread}</span>}
+          </button>
+          <button
+            role="tab"
+            aria-selected={box === "sent"}
+            onClick={() => setBox("sent")}
+            className={`flex-1 rounded-lg px-4 py-1.5 sm:flex-none ${box === "sent" ? "bg-surface text-ink shadow-sm" : "text-muted"}`}
+          >
+            📤 보낸 메모
+          </button>
+        </div>
+        {box === "sent" ? (
+          sent.length === 0 ? (
           <div className="card p-8 text-center text-muted">최근 2주 동안 보낸 메모가 없어요.</div>
         ) : (
           <ul className="space-y-2.5">
@@ -148,6 +201,62 @@ const MessageComposer = forwardRef<MessageComposerHandle, { people: Person[] }>(
                 </li>
               );
             })}
+          </ul>
+        )
+        ) : received.length === 0 ? (
+          <div className="card p-8 text-center text-muted">최근 2주 동안 강사에게 받은 메시지가 없어요.</div>
+        ) : (
+          <ul className="space-y-2.5">
+            {received.map((m) => (
+              <li key={m.id} className={`card p-4 text-sm ${m.read_at ? "" : "border-accent"}`}>
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 text-xs font-bold text-accent">
+                      💬 {m.from_name ?? "강사"}
+                      {!m.read_at && <span className="ml-1.5 rounded bg-danger px-1.5 py-0.5 text-[10px] text-white">새 메시지</span>}
+                    </div>
+                    {m.reply_to_text && <p className="mb-1 line-clamp-1 border-l-4 border-line pl-2 text-xs text-muted">↪ 내 메모: {m.reply_to_text}</p>}
+                    <p className="whitespace-pre-wrap">{m.text}</p>
+                  </div>
+                  {m.replied > 0 ? (
+                    <span className="shrink-0 rounded-full bg-ok-soft px-2.5 py-0.5 text-xs font-bold text-ok">답장함</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs font-semibold text-accent hover:underline"
+                      onClick={() => {
+                        setReplyId(replyId === m.id ? null : m.id);
+                        setReplyText("");
+                      }}
+                    >
+                      ↩ 답장
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 text-xs text-muted">{formatDateTime(m.created_at)}</div>
+                {replyId === m.id && (
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      className="input py-1.5 text-sm"
+                      autoFocus
+                      maxLength={500}
+                      placeholder="답장을 적어 주세요"
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing && replyText.trim()) {
+                          e.preventDefault();
+                          sendReply(m);
+                        }
+                      }}
+                    />
+                    <button type="button" className="btn-primary shrink-0 py-1.5" disabled={!replyText.trim()} onClick={() => sendReply(m)}>
+                      보내기
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
           </ul>
         )}
       </div>

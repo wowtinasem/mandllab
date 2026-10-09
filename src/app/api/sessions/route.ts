@@ -1,7 +1,7 @@
 import { currentInstructor, newId } from "@/lib/auth";
 import { db, isEphemeralDb, now } from "@/lib/db";
 import { bad, clampInt, readJson, str } from "@/lib/http";
-import { issueSessionCode, refreshSession } from "@/lib/sessions";
+import { MAX_CLASS_MIN, issueSessionCode, refreshSession } from "@/lib/sessions";
 
 export async function GET() {
   const me = await currentInstructor();
@@ -42,7 +42,8 @@ export async function POST(req: Request) {
   if (!title) return bad("수업 이름을 입력해 주세요.");
   const perLimit = clampInt(b.perLimit, 1, 500, 30);
   const capacity = clampInt(b.capacity, 1, 300, 45);
-  const durationMin = clampInt(b.durationMin, 0, 24 * 60, 180);
+  // 진행 시간은 10분~최대 4시간. 비우거나 0이면 4시간으로 둔다
+  const durationMin = clampInt(b.durationMin || MAX_CLASS_MIN, 10, MAX_CLASS_MIN, MAX_CLASS_MIN);
   const costCap = Math.min(1000, Math.max(0.1, Number(b.costCapUsd) || 50));
 
   const id = newId();
@@ -53,6 +54,6 @@ export async function POST(req: Request) {
       `INSERT INTO sessions (id, code, title, instructor_id, status, per_limit, cost_cap_usd, capacity, ends_at, created_at)
        VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
     )
-    .run(id, code, title, me.id, perLimit, costCap, capacity, durationMin ? t + durationMin * 60_000 : null, t);
+    .run(id, code, title, me.id, perLimit, costCap, capacity, t + durationMin * 60_000, t);
   return Response.json({ id, code });
 }

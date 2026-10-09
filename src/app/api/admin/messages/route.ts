@@ -5,23 +5,35 @@ import { ONLINE_WINDOW_MS, type MessageTarget } from "@/lib/messages";
 
 const TARGETS: MessageTarget[] = ["one", "online", "teaching", "all"];
 
-/** 메인 관리자: 최근 보낸 메모와 확인한 인원 */
+/** 메인 관리자: 최근 2주 동안 보낸 메모(확인 인원)와 강사에게 받은 메시지 */
 export async function GET() {
-  if (!(await currentAdmin())) return bad("메인 관리자만 볼 수 있어요.", 403);
+  const admin = await currentAdmin();
+  if (!admin) return bad("메인 관리자만 볼 수 있어요.", 403);
+  const since = now() - 14 * 86_400_000;
+  const received = await db()
+    .prepare(
+      `SELECT m.id, m.text, m.created_at, m.read_at, f.name AS from_name, o.text AS reply_to_text,
+              (SELECT COUNT(*) FROM admin_messages r WHERE r.reply_to = m.id) AS replied
+       FROM admin_messages m
+       LEFT JOIN instructors f ON f.id = m.from_id
+       LEFT JOIN admin_messages o ON o.id = m.reply_to
+       WHERE m.to_id = ? AND m.created_at > ? ORDER BY m.created_at DESC LIMIT 100`,
+    )
+    .all(admin.id, since);
   const rows = (await db()
     .prepare(
       `SELECT m.batch_id, m.text, m.created_at, m.read_at, i.name AS to_name
        FROM admin_messages m LEFT JOIN instructors i ON i.id = m.to_id
-       WHERE m.created_at > ? ORDER BY m.created_at DESC LIMIT 300`,
+       WHERE m.from_id = ? AND m.created_at > ? ORDER BY m.created_at DESC LIMIT 300`,
     )
-    .all(now() - 14 * 86_400_000)) as { batch_id: string; text: string; created_at: number; read_at: number | null; to_name: string }[];
+    .all(admin.id, since)) as { batch_id: string; text: string; created_at: number; read_at: number | null; to_name: string }[];
   const batches = new Map<string, { id: string; text: string; created_at: number; to: { name: string; read: boolean }[] }>();
   for (const r of rows) {
     const b = batches.get(r.batch_id) ?? { id: r.batch_id, text: r.text, created_at: r.created_at, to: [] };
     b.to.push({ name: r.to_name ?? "(삭제된 강사)", read: r.read_at !== null });
     batches.set(r.batch_id, b);
   }
-  return Response.json({ sent: [...batches.values()].slice(0, 20) });
+  return Response.json({ sent: [...batches.values()].slice(0, 20), received });
 }
 
 /**
