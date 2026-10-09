@@ -165,18 +165,18 @@ async function migrate(client: Client) {
   }
 }
 
-// 메인 관리자 계정: ADMIN_TEST_PASSWORD 가 있으면 아이디 'admin' 으로 로그인한다.
-// 비밀번호는 코드에 두지 않고 환경 변수로만 받으며, 바꾸면 다음 서버 시작 때 반영된다.
-export const ADMIN_LOGIN_ID = "admin";
-
+// 메인 관리자 계정: 아이디는 ADMIN_LOGIN_ID(기본 'admin'), 비밀번호는 ADMIN_TEST_PASSWORD.
+// 둘 다 코드에 두지 않고 환경 변수로만 받으며, 바꾸면 다음 서버 시작 때 반영된다.
+// 계정 id 는 'admin-test' 로 고정해서 아이디를 바꿔도 같은 계정(만든 수업 포함)이 이어진다.
 async function seedAdmin(client: Client) {
   const pw = process.env.ADMIN_TEST_PASSWORD;
   if (!pw) return;
+  const loginId = (process.env.ADMIN_LOGIN_ID || "admin").trim().toLowerCase();
   await client.execute({
     sql: `INSERT INTO instructors (id, email, name, org, pw_hash, created_at, role, status)
           VALUES ('admin-test', ?, '메인 관리자', '만들랩', ?, ?, 'admin', 'active')
-          ON CONFLICT(email) DO UPDATE SET pw_hash = excluded.pw_hash, role = 'admin', status = 'active'`,
-    args: [ADMIN_LOGIN_ID, hashPassword(pw), Date.now()],
+          ON CONFLICT(id) DO UPDATE SET email = excluded.email, pw_hash = excluded.pw_hash, role = 'admin', status = 'active'`,
+    args: [loginId, hashPassword(pw), Date.now()],
   });
 }
 
