@@ -10,14 +10,14 @@ export interface Instructor {
   role: InstructorRole;
 }
 
-export interface AccessCode {
+export interface AllowedInstructor {
   id: string;
-  code: string;
-  label: string;
-  max_uses: number;
-  used_count: number;
-  expires_at: number | null;
+  name: string;
+  phone: string;
+  org: string;
+  memo: string;
   active: number;
+  instructor_id: string | null;
   created_at: number;
 }
 

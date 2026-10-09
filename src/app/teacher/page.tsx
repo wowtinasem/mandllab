@@ -23,19 +23,27 @@ export default function TeacherHome() {
   return <SessionList instructor={me.instructor} mockMode={me.mockMode} dbMissing={me.dbMissing} onLogout={load} />;
 }
 
+type AuthMode = "login" | "signup" | "admin";
+
 function AuthForm({ onDone }: { onDone: () => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [f, setF] = useState({ email: "", password: "", name: "", org: "", accessCode: "" });
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [f, setF] = useState({ name: "", phone: "", email: "", id: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const go = (m: AuthMode) => {
+    setError("");
+    setMode(m);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setBusy(true);
     try {
-      await api(`/api/instructor/${mode}`, { body: f });
+      if (mode === "signup") await api("/api/instructor/signup", { body: { name: f.name, phone: f.phone, email: f.email } });
+      else if (mode === "login") await api("/api/instructor/login", { body: { name: f.name, phone: f.phone } });
+      else await api("/api/instructor/login", { body: { email: f.id, password: f.password } });
       onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -44,58 +52,84 @@ function AuthForm({ onDone }: { onDone: () => void }) {
     }
   };
 
+  const title = mode === "signup" ? "강사 가입" : mode === "admin" ? "메인 관리자 로그인" : "강사 로그인";
+  const desc =
+    mode === "signup"
+      ? "메인 관리자가 등록해 둔 이름·전화번호와 같게 입력해 주세요. 일치하면 바로 가입돼요."
+      : mode === "admin"
+        ? "메인 관리자 아이디와 비밀번호로 로그인해요."
+        : "가입한 강사는 이름과 전화번호만으로 들어올 수 있어요.";
+  const ready = mode === "admin" ? f.id.trim() && f.password : f.name.trim() && f.phone.trim() && (mode === "login" || f.email.trim());
+
   return (
     <main className="mx-auto max-w-md px-4 py-8">
       <Logo />
       <form onSubmit={submit} className="card mt-10 space-y-4 p-6 sm:p-8">
         <div>
-          <h1 className="text-2xl font-bold">강사 {mode === "login" ? "로그인" : "가입"}</h1>
-          <p className="mt-1 text-sm text-muted">수업을 만들고 참여자 진행 상황을 한 화면에서 봐요.</p>
+          <h1 className="text-2xl font-bold">{title}</h1>
+          <p className="mt-1 text-sm text-muted">{desc}</p>
         </div>
-        {mode === "signup" && (
+        {mode === "admin" ? (
           <>
-            <div className="rounded-xl bg-accent-soft p-3">
-              <Field id="access" label="강사 접근 코드" value={f.accessCode} onChange={set("accessCode")} />
-              <p className="mt-1.5 text-xs text-muted">메인 관리자에게 받은 코드예요. 예: T-ABCD-2345</p>
-            </div>
-            <Field id="name" label="이름" value={f.name} onChange={set("name")} />
-            <Field id="org" label="소속 (기업·대학, 선택)" value={f.org} onChange={set("org")} />
+            <Field id="admin-id" label="아이디" value={f.id} onChange={set("id")} />
+            <Field id="admin-pw" label="비밀번호" type="password" value={f.password} onChange={set("password")} />
+          </>
+        ) : (
+          <>
+            <Field id="name" label="강사 이름" value={f.name} onChange={set("name")} />
+            <Field id="phone" label="전화번호" type="tel" placeholder="010-1234-5678" value={f.phone} onChange={set("phone")} />
+            {mode === "signup" && <Field id="email" label="이메일" type="email" placeholder="연락받을 이메일" value={f.email} onChange={set("email")} />}
           </>
         )}
-        <Field
-          id="email"
-          label={mode === "login" ? "이메일 (관리자는 아이디)" : "이메일"}
-          type={mode === "login" ? "text" : "email"}
-          value={f.email}
-          onChange={set("email")}
-        />
-        <Field id="pw" label={mode === "login" ? "비밀번호" : "비밀번호 (8자 이상)"} type="password" value={f.password} onChange={set("password")} />
         {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
-        <button className="btn-primary w-full py-3" disabled={busy}>
-          {busy ? "처리 중…" : mode === "login" ? "로그인" : "가입하고 시작하기"}
+        <button className="btn-primary w-full py-3" disabled={busy || !ready}>
+          {busy ? "확인하는 중…" : mode === "signup" ? "가입하기" : "로그인"}
         </button>
-        <button
-          type="button"
-          className="w-full text-sm text-muted hover:text-accent"
-          onClick={() => {
-            setError("");
-            setMode(mode === "login" ? "signup" : "login");
-          }}
-        >
-          {mode === "login" ? "처음이신가요? 강사 가입 (접근 코드 필요)" : "이미 계정이 있어요 → 로그인"}
-        </button>
+        <div className="space-y-2 text-center text-sm">
+          {mode !== "signup" && (
+            <button type="button" className="block w-full text-muted hover:text-accent" onClick={() => go("signup")}>
+              처음이신가요? <b>강사 가입</b>
+            </button>
+          )}
+          {mode !== "login" && (
+            <button type="button" className="block w-full text-muted hover:text-accent" onClick={() => go("login")}>
+              강사 로그인으로 돌아가기
+            </button>
+          )}
+          {mode !== "admin" && (
+            <button type="button" className="block w-full text-xs text-muted/80 hover:text-accent" onClick={() => go("admin")}>
+              메인 관리자 로그인
+            </button>
+          )}
+        </div>
       </form>
+      <p className="mt-4 text-center text-xs text-muted">학생은 로그인 없이 첫 화면에서 강의 코드로 들어가요.</p>
     </main>
   );
 }
 
-function Field(props: { id: string; label: string; value: string; type?: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
+function Field(props: {
+  id: string;
+  label: string;
+  value: string;
+  type?: string;
+  placeholder?: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
   return (
     <div>
       <label htmlFor={props.id} className="label">
         {props.label}
       </label>
-      <input id={props.id} className="input" type={props.type ?? "text"} value={props.value} onChange={props.onChange} />
+      <input
+        id={props.id}
+        className="input"
+        type={props.type ?? "text"}
+        inputMode={props.type === "tel" ? "tel" : undefined}
+        placeholder={props.placeholder}
+        value={props.value}
+        onChange={props.onChange}
+      />
     </div>
   );
 }

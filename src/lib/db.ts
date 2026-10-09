@@ -104,16 +104,16 @@ CREATE TABLE IF NOT EXISTS usage (
 );
 CREATE INDEX IF NOT EXISTS usage_session ON usage(session_id);
 
--- 강사 접근 코드: 메인 관리자가 발급하고, 이 코드가 있어야 강사로 가입할 수 있다
-CREATE TABLE IF NOT EXISTS access_codes (
+-- 허용 강사 명단: 메인 관리자가 이름과 전화번호를 미리 등록해 둔다.
+-- 강사가 가입할 때 이름·전화번호가 이 명단과 맞아야 계정이 만들어진다.
+CREATE TABLE IF NOT EXISTS allowed_instructors (
   id TEXT PRIMARY KEY,
-  code TEXT NOT NULL UNIQUE,
-  label TEXT NOT NULL DEFAULT '',
-  max_uses INTEGER NOT NULL DEFAULT 1,
-  used_count INTEGER NOT NULL DEFAULT 0,
-  expires_at INTEGER,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL UNIQUE,          -- 숫자만 (01012345678)
+  org TEXT NOT NULL DEFAULT '',
+  memo TEXT NOT NULL DEFAULT '',
   active INTEGER NOT NULL DEFAULT 1,
-  created_by TEXT NOT NULL,
+  instructor_id TEXT,                  -- 가입을 마치면 연결된 강사 계정
   created_at INTEGER NOT NULL
 );
 `;
@@ -153,6 +153,7 @@ const MIGRATIONS = [
   "ALTER TABLE instructors ADD COLUMN role TEXT NOT NULL DEFAULT 'instructor'", // admin | instructor
   "ALTER TABLE instructors ADD COLUMN status TEXT NOT NULL DEFAULT 'active'", // active | disabled
   "ALTER TABLE instructors ADD COLUMN access_code_id TEXT",
+  "ALTER TABLE instructors ADD COLUMN phone TEXT",
 ];
 
 async function migrate(client: Client) {
