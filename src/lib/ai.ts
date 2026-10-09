@@ -1,5 +1,6 @@
 import "server-only";
 import type { GenerateMode, PlanHistoryItem, PlanQuestion, PlanReply } from "./types";
+import { IMAGE_GUIDE, LIBRARY_GUIDE } from "./catalog";
 
 // ───────────────────────── 모델과 단가 ─────────────────────────
 
@@ -41,12 +42,16 @@ const COMMON_RULES = `너는 '만들랩'의 웹 앱 제작 도우미다. 사용�
 
 [결과물 규칙]
 - 결과물은 파일 하나만으로 브라우저에서 바로 열리는 단일 HTML 문서다. CSS와 JS는 문서 안에 인라인으로 넣는다.
-- 외부 라이브러리는 jsDelivr, cdnjs, unpkg 같은 주요 CDN에서 <script>/<link>로 자유롭게 불러와도 된다. (예: Chart.js, PapaParse, SheetJS, dayjs)
+- 외부 라이브러리는 jsDelivr, cdnjs, unpkg 같은 주요 CDN에서 <script>/<link>로 불러와도 된다. 아래 "검증된 라이브러리 목록"의 주소를 우선 쓰고, 목록에 없는 라이브러리는 확실히 존재하는 주소와 버전만 쓴다. 확실하지 않으면 라이브러리 없이 직접 구현한다.
 - 키가 필요 없는 공개 API는 fetch로 호출해도 된다. API 키·비밀번호가 필요한 서비스는 코드에 키를 넣지 말고, 요약에서 그 점을 알린다.
 - 여러 화면은 한 파일 안에서 화면 전환으로 만든다. localStorage 저장, 파일 업로드(FileReader, CSV·엑셀 읽기)를 써도 된다.
 - 화면 글자는 한국어. 깔끔하고 현대적인 디자인, 노트북과 휴대폰 모두에서 보기 좋은 반응형, 충분한 글자 대비, 입력칸에는 라벨.
 - <title>에는 짧은 한국어 앱 이름을 넣는다.
 - 마크다운 코드 블록(\`\`\`)이나 HTML 밖의 설명 문장을 쓰지 않는다.
+
+${LIBRARY_GUIDE}
+
+${IMAGE_GUIDE}
 
 [응답 첫 줄]
 - 반드시 <!-- 요약: ... --> 한 줄로 시작한다. 무엇을 만들었거나 바꿨는지 비개발자도 이해하게 1~2문장으로 쓴다.

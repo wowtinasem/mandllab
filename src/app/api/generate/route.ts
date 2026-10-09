@@ -17,6 +17,7 @@ import {
   pickModel,
 } from "@/lib/ai";
 import { mockOutput, mockPlan, streamMock } from "@/lib/mock";
+import { findBrokenUrls } from "@/lib/urlcheck";
 import type { GenerateMode, PlanHistoryItem, StreamEvent, Version, VersionMeta } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -101,16 +102,23 @@ export async function POST(req: Request) {
           d: mode === "plan" ? "생각을 정리하는 중…" : mode === "explain" ? "코드를 읽는 중…" : mode === "create" ? "앱을 만드는 중…" : "고치는 중…",
         });
 
-        const run = async (fullRewrite: boolean): Promise<AiResult & { model: string }> => {
-          const model = pickModel(mode, prompt);
-          const { system, user } = buildPrompt({ mode, prompt, baseHtml: base?.html, history, fullRewrite, planHistory });
+        // override: 자동 고치기처럼 학생 요청과 다른 지시로 한 번 더 부를 때 쓴다
+        const run = async (
+          fullRewrite: boolean,
+          override?: { mode: GenerateMode; prompt: string; baseHtml: string },
+        ): Promise<AiResult & { model: string }> => {
+          const m = override?.mode ?? mode;
+          const p = override?.prompt ?? prompt;
+          const baseHtml = override ? override.baseHtml : base?.html;
+          const model = pickModel(m, p);
+          const { system, user } = buildPrompt({ mode: m, prompt: p, baseHtml, history: override ? [] : history, fullRewrite, planHistory });
           // 질문 모드의 JSON 은 화면에 흘려 보여주지 않는다
-          const onDelta = mode === "plan" ? () => {} : (d: string) => send({ t: "delta", d });
+          const onDelta = m === "plan" ? () => {} : (d: string) => send({ t: "delta", d });
           const mock = () =>
-            mode === "plan"
-              ? mockPlan(prompt, planHistory.filter((h) => h.role === "user").length, Boolean(base))
-              : mockOutput(mode, prompt, base?.html, fullRewrite);
-          const r = isMockMode() ? await streamMock(mock(), onDelta) : await callGemini(model, system, user, onDelta, undefined, mode === "plan");
+            m === "plan"
+              ? mockPlan(p, planHistory.filter((h) => h.role === "user").length, Boolean(base))
+              : mockOutput(m, p, baseHtml, fullRewrite);
+          const r = isMockMode() ? await streamMock(mock(), onDelta) : await callGemini(model, system, user, onDelta, undefined, m === "plan");
           await db()
             .prepare(
               "INSERT INTO usage (session_id, participant_id, model, input_tokens, output_tokens, cost_usd, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -156,6 +164,24 @@ export async function POST(req: Request) {
         }
         if (html === null) {
           throw new AiError("unparseable output", "AI 답변을 앱으로 바꾸지 못했어요. 요청을 조금 바꿔 다시 시도해 주세요.");
+        }
+
+        // AI가 없는 라이브러리 주소를 쓰면 앱이 멈춘다. 외부 주소를 실제로 열어 보고, 없는 주소가 있으면 한 번 자동으로 고친다 (요청 횟수 차감 없음)
+        if (!isMockMode()) {
+          const broken = await findBrokenUrls(html);
+          if (broken.length) {
+            send({ t: "status", d: "불러오지 못하는 라이브러리 주소를 고치는 중…" });
+            send({ t: "delta", d: "\n\n<!-- 라이브러리 주소 자동 고치기 -->\n" });
+            const fixPrompt = `이 앱이 불러오는 다음 외부 주소는 존재하지 않아(404) 앱이 동작하지 않는다.\n${broken.join("\n")}\n검증된 라이브러리 목록의 주소로 바꾸고, 바뀐 라이브러리의 사용법에 맞게 코드도 함께 고쳐라. 목록에 없는 기능이면 라이브러리 없이 직접 구현하라. 다른 부분은 바꾸지 않는다.`;
+            try {
+              const fixed = parseOutput((await run(false, { mode: "edit", prompt: fixPrompt, baseHtml: html })).text);
+              const repaired = fixed.kind === "diff" ? applyBlocks(html, fixed.blocks) : fixed.kind === "full" ? fixed.html : null;
+              if (repaired) html = repaired;
+              await addLog(session.id, participant.id, "autofix", `라이브러리 주소 자동 고침: ${broken.join(", ")}`);
+            } catch (e) {
+              console.error("[generate] autofix failed", e); // 고치기에 실패해도 학생 요청 결과는 그대로 저장한다
+            }
+          }
         }
 
         const summary = ("summary" in out && out.summary) || "요청을 반영했어요.";

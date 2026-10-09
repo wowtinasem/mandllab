@@ -48,6 +48,7 @@ const KIND_LABEL: Record<string, string> = {
   edit: "수정",
   fix: "오류 수정",
   explain: "코드 질문",
+  autofix: "자동 고침",
   plan: "아이디어 대화",
   blocked: "차단",
   refused: "AI 거절",
