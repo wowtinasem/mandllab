@@ -234,7 +234,7 @@ export default function Home() {
       </section>
 
       <footer className="py-4 text-center text-xs text-muted">
-        만들랩 · 만 18세 이상 이용 · 이름(별명)만 저장하며 업로드한 파일은 내 브라우저 안에서만 처리돼요
+        Copyright © (주)드림정보
       </footer>
     </main>
   );
