@@ -133,6 +133,9 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
             <div className="text-xs text-muted">강의 코드</div>
             <div className="font-mono text-2xl font-extrabold tracking-[0.25em] text-accent">{s.code}</div>
           </div>
+          <Link href="/teacher/guide" target="_blank" className="btn-ghost" title="강사 사용 가이드 (새 창)">
+            📖 가이드
+          </Link>
           <Link href={`/teacher/${id}/present`} target="_blank" className="btn-primary">
             📺 발표 화면
           </Link>

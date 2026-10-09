@@ -140,3 +140,19 @@ body {
     @apply mb-1.5 block text-sm font-semibold;
   }
 }
+
+/* 강사 가이드 본문의 코드·키보드 표시 */
+.guide code,
+.guide kbd {
+  border-radius: 0.375rem;
+  background: var(--surface-2);
+  padding: 0.05rem 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+@media print {
+  .guide .card {
+    break-inside: avoid;
+  }
+}

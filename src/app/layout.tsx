@@ -2,9 +2,29 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { themeInitScript } from "@/lib/theme";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mandllab.vercel.app";
+const TITLE = "만들랩 — 말로 설명하면 진짜 쓰는 앱이 됩니다";
+const DESCRIPTION = "강의 코드 하나로 입장해 AI와 대화하며 나만의 웹 앱을 만들고 HTML 파일로 가져가는 바이브코딩 실습 도구";
+
+// 링크를 카카오톡·문자·SNS 에 공유할 때 보이는 제목·설명. 미리보기 이미지는 app/opengraph-image.png
 export const metadata: Metadata = {
-  title: "만들랩 — 말로 만드는 나의 웹 앱",
-  description: "강의 코드 하나로 입장해 AI와 대화하며 실제로 쓰는 웹 앱을 만드는 바이브코딩 메이커 도구",
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  applicationName: "만들랩",
+  openGraph: {
+    type: "website",
+    locale: "ko_KR",
+    siteName: "만들랩",
+    url: "/",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

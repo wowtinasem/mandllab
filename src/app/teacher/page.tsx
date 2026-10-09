@@ -205,6 +205,9 @@ function SessionList({
             {instructor.name}
             {instructor.org && ` · ${instructor.org}`}
           </span>
+          <Link href="/teacher/guide" className="btn-primary py-1.5">
+            📖 사용 가이드
+          </Link>
           <button
             className="btn-ghost py-1.5"
             onClick={async () => {
