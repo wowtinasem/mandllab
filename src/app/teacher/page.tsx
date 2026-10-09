@@ -164,7 +164,7 @@ function SessionList({
   onLogout: () => void;
 }) {
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
-  const [form, setForm] = useState({ title: "", perLimit: 30, costCapUsd: 20, capacity: 45, durationMin: 180 });
+  const [form, setForm] = useState({ title: "", perLimit: 60, costCapUsd: 25, capacity: 45, durationMin: 270 });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
