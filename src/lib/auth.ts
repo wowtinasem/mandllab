@@ -42,21 +42,29 @@ export async function currentInstructor(): Promise<Instructor | null> {
   if (!token) return null;
   const row = await db()
     .prepare(
-      `SELECT i.id, i.email, i.name, i.org FROM instructor_tokens t
+      `SELECT i.id, i.email, i.name, i.org, i.role FROM instructor_tokens t
        JOIN instructors i ON i.id = t.instructor_id
-       WHERE t.token_hash = ? AND t.expires_at > ?`,
+       WHERE t.token_hash = ? AND t.expires_at > ? AND i.status = 'active'`,
     )
     .get(sha256(token), now()) as Instructor | undefined;
   return row ?? null;
 }
 
-/** 강사 본인 세션만 돌려준다. 남의 세션이면 null. */
+export const isAdmin = (i: Instructor | null) => i?.role === "admin";
+
+/** 강사는 자기가 만든 세션만, 메인 관리자는 모든 세션을 돌려준다. 볼 수 없으면 null. */
 export async function ownedSession(sessionId: string): Promise<{ instructor: Instructor; session: Session } | null> {
   const instructor = await currentInstructor();
   if (!instructor) return null;
   const session = await refreshSession(sessionId);
-  if (!session || session.instructor_id !== instructor.id) return null;
+  if (!session || (session.instructor_id !== instructor.id && !isAdmin(instructor))) return null;
   return { instructor, session };
+}
+
+/** 메인 관리자만 통과. 아니면 null */
+export async function currentAdmin(): Promise<Instructor | null> {
+  const i = await currentInstructor();
+  return isAdmin(i) ? i : null;
 }
 
 export async function setParticipantCookie(token: string) {

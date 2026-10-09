@@ -8,6 +8,5 @@ export async function GET() {
     instructor,
     mockMode: isMockMode(),
     dbMissing: isEphemeralDb(),
-    inviteRequired: Boolean(process.env.INSTRUCTOR_INVITE_KEY),
   });
 }

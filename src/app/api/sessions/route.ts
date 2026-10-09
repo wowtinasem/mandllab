@@ -6,9 +6,15 @@ import { issueSessionCode, refreshSession } from "@/lib/sessions";
 export async function GET() {
   const me = await currentInstructor();
   if (!me) return bad("로그인이 필요해요.", 401);
-  const ids = await db().prepare("SELECT id FROM sessions WHERE instructor_id = ? ORDER BY created_at DESC LIMIT 100").all(me.id) as {
-    id: string;
-  }[];
+  // 메인 관리자는 모든 강사의 수업을, 강사는 자기가 만든 수업만 본다
+  const ids = (
+    me.role === "admin"
+      ? await db().prepare("SELECT id FROM sessions ORDER BY created_at DESC LIMIT 300").all()
+      : await db().prepare("SELECT id FROM sessions WHERE instructor_id = ? ORDER BY created_at DESC LIMIT 100").all(me.id)
+  ) as { id: string }[];
+  const names = new Map(
+    ((await db().prepare("SELECT id, name FROM instructors").all()) as { id: string; name: string }[]).map((r) => [r.id, r.name]),
+  );
   const count = db().prepare("SELECT COUNT(*) AS n FROM participants WHERE session_id = ?");
   const cost = db().prepare("SELECT COALESCE(SUM(cost_usd),0) AS c FROM usage WHERE session_id = ?");
   const sessions = await Promise.all(
@@ -18,6 +24,8 @@ export async function GET() {
         ...s,
         participantCount: ((await count.get(s.id)) as { n: number }).n,
         costUsd: ((await cost.get(s.id)) as { c: number }).c,
+        instructorName: names.get(s.instructor_id) ?? "",
+        mine: s.instructor_id === me.id,
       };
     }),
   );

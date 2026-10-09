@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
+import AdminPanel from "@/components/AdminPanel";
 import { api, formatDateTime } from "@/lib/client";
 import type { Instructor, Session } from "@/lib/types";
 
-type SessionRow = Session & { participantCount: number; costUsd: number };
-type MeResp = { instructor: Instructor | null; mockMode: boolean; dbMissing: boolean; inviteRequired: boolean };
+type SessionRow = Session & { participantCount: number; costUsd: number; instructorName: string; mine: boolean };
+type MeResp = { instructor: Instructor | null; mockMode: boolean; dbMissing: boolean };
 
 export default function TeacherHome() {
   const [me, setMe] = useState<MeResp | null>(null);
@@ -18,13 +19,13 @@ export default function TeacherHome() {
   }, [load]);
 
   if (!me) return <div className="grid min-h-screen place-items-center text-muted">불러오는 중…</div>;
-  if (!me.instructor) return <AuthForm inviteRequired={me.inviteRequired} onDone={load} />;
+  if (!me.instructor) return <AuthForm onDone={load} />;
   return <SessionList instructor={me.instructor} mockMode={me.mockMode} dbMissing={me.dbMissing} onLogout={load} />;
 }
 
-function AuthForm({ inviteRequired, onDone }: { inviteRequired: boolean; onDone: () => void }) {
+function AuthForm({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [f, setF] = useState({ email: "", password: "", name: "", org: "", inviteKey: "" });
+  const [f, setF] = useState({ email: "", password: "", name: "", org: "", accessCode: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
@@ -53,6 +54,10 @@ function AuthForm({ inviteRequired, onDone }: { inviteRequired: boolean; onDone:
         </div>
         {mode === "signup" && (
           <>
+            <div className="rounded-xl bg-accent-soft p-3">
+              <Field id="access" label="강사 접근 코드" value={f.accessCode} onChange={set("accessCode")} />
+              <p className="mt-1.5 text-xs text-muted">메인 관리자에게 받은 코드예요. 예: T-ABCD-2345</p>
+            </div>
             <Field id="name" label="이름" value={f.name} onChange={set("name")} />
             <Field id="org" label="소속 (기업·대학, 선택)" value={f.org} onChange={set("org")} />
           </>
@@ -65,9 +70,6 @@ function AuthForm({ inviteRequired, onDone }: { inviteRequired: boolean; onDone:
           onChange={set("email")}
         />
         <Field id="pw" label={mode === "login" ? "비밀번호" : "비밀번호 (8자 이상)"} type="password" value={f.password} onChange={set("password")} />
-        {mode === "signup" && inviteRequired && (
-          <Field id="invite" label="강사 초대 키" value={f.inviteKey} onChange={set("inviteKey")} />
-        )}
         {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <button className="btn-primary w-full py-3" disabled={busy}>
           {busy ? "처리 중…" : mode === "login" ? "로그인" : "가입하고 시작하기"}
@@ -80,7 +82,7 @@ function AuthForm({ inviteRequired, onDone }: { inviteRequired: boolean; onDone:
             setMode(mode === "login" ? "signup" : "login");
           }}
         >
-          {mode === "login" ? "처음이신가요? 강사 가입" : "이미 계정이 있어요 → 로그인"}
+          {mode === "login" ? "처음이신가요? 강사 가입 (접근 코드 필요)" : "이미 계정이 있어요 → 로그인"}
         </button>
       </form>
     </main>
@@ -120,6 +122,10 @@ function SessionList({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const admin = instructor.role === "admin";
+  const [tab, setTab] = useState<"sessions" | "instructors">("sessions");
+  const [onlyMine, setOnlyMine] = useState(false);
+  const shown = sessions && (admin && onlyMine ? sessions.filter((s) => s.mine) : sessions);
 
   const load = useCallback(() => api<{ sessions: SessionRow[] }>("/api/sessions").then((r) => setSessions(r.sessions)), []);
   useEffect(() => {
@@ -147,6 +153,9 @@ function SessionList({
         <Logo href="/teacher" />
         <div className="flex items-center gap-3 text-sm">
           <span className="text-muted">
+            <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[11px] font-bold ${admin ? "bg-accent text-accent-fg" : "bg-accent-soft text-accent"}`}>
+              {admin ? "메인 관리자" : "강사"}
+            </span>
             {instructor.name}
             {instructor.org && ` · ${instructor.org}`}
           </span>
@@ -174,6 +183,32 @@ function SessionList({
         </div>
       )}
 
+      {admin && (
+        <div className="mt-6 flex gap-1 rounded-xl bg-surface-2 p-1 text-sm font-semibold sm:w-fit" role="tablist">
+          {(
+            [
+              ["sessions", "📚 수업"],
+              ["instructors", "🧑‍🏫 강사 관리"],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={tab === k}
+              onClick={() => setTab(k)}
+              className={`flex-1 rounded-lg px-4 py-2 sm:flex-none ${tab === k ? "bg-surface text-ink shadow-sm" : "text-muted"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {admin && tab === "instructors" ? (
+        <div className="mt-6">
+          <AdminPanel />
+        </div>
+      ) : (
       <section className="mt-8 grid gap-6 lg:grid-cols-[360px_1fr]">
         <form onSubmit={create} className="card h-fit space-y-4 p-5">
           <h2 className="text-lg font-bold">새 수업 만들기</h2>
@@ -205,14 +240,21 @@ function SessionList({
         </form>
 
         <div>
-          <h2 className="mb-3 text-lg font-bold">내 수업</h2>
-          {!sessions ? (
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-lg font-bold">{admin ? (onlyMine ? "내 수업" : "전체 수업") : "내 수업"}</h2>
+            {admin && (
+              <label className="flex items-center gap-1.5 text-sm text-muted">
+                <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />내가 만든 것만
+              </label>
+            )}
+          </div>
+          {!shown ? (
             <p className="text-muted">불러오는 중…</p>
-          ) : sessions.length === 0 ? (
+          ) : shown.length === 0 ? (
             <div className="card p-10 text-center text-muted">아직 만든 수업이 없어요.</div>
           ) : (
             <ul className="space-y-2.5">
-              {sessions.map((s) => (
+              {shown.map((s) => (
                 <li key={s.id}>
                   <Link href={`/teacher/${s.id}`} className="card flex flex-wrap items-center gap-x-4 gap-y-1 p-4 transition hover:border-accent">
                     <span className="font-mono text-lg font-extrabold tracking-widest text-accent">{s.code}</span>
@@ -221,6 +263,7 @@ function SessionList({
                       {STATUS_LABEL[s.status][0]}
                     </span>
                     <span className="w-full text-xs text-muted sm:w-auto">
+                      {admin && <b className="text-ink">{s.mine ? "나" : s.instructorName} · </b>}
                       {formatDateTime(s.created_at)} · {s.participantCount}명 · ${s.costUsd.toFixed(2)}
                     </span>
                   </Link>
@@ -230,6 +273,7 @@ function SessionList({
           )}
         </div>
       </section>
+      )}
     </main>
   );
 }

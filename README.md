@@ -47,5 +47,5 @@ src/components/Preview.tsx   sandbox iframe 미리보기 (서비스 쿠키와 �
 ## 배포 시 주의
 - Vercel: `vercel integration add tursocloud/database --plan starter` 로 Turso를 연결하면 환경 변수가 자동으로 들어간다. 연결 전에는 /tmp 임시 저장소로 돌아가 데이터가 유지되지 않는다.
 - 동시 호출 대기열과 입장 시도 제한은 서버 인스턴스 메모리에 있다. 인스턴스가 여러 개로 늘면 인스턴스별로 따로 센다.
-- 운영 전 `INSTRUCTOR_INVITE_KEY` 를 설정하고, `/terms` 안내문을 실제 약관으로 바꾼다.
+- 강사 가입은 메인 관리자(아이디 `admin`)가 강사 화면의 **강사 관리** 탭에서 발급한 접근 코드가 있어야 한다. 운영 전 `/terms` 안내문을 실제 약관으로 바꾼다.
 - 기업 방화벽: `generativelanguage.googleapis.com`(서버), 참여자 브라우저는 서비스 도메인과 `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `unpkg.com` 접근이 필요하다.

@@ -27,6 +27,6 @@ export async function readableVersion(versionId: string): Promise<{ version: Ver
     if (shared) return { version, nickname };
   }
   const inst = await currentInstructor();
-  if (inst && inst.id === session.instructor_id) return { version, nickname };
+  if (inst && (inst.id === session.instructor_id || inst.role === "admin")) return { version, nickname };
   return null;
 }

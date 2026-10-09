@@ -103,6 +103,19 @@ CREATE TABLE IF NOT EXISTS usage (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS usage_session ON usage(session_id);
+
+-- 강사 접근 코드: 메인 관리자가 발급하고, 이 코드가 있어야 강사로 가입할 수 있다
+CREATE TABLE IF NOT EXISTS access_codes (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL DEFAULT '',
+  max_uses INTEGER NOT NULL DEFAULT 1,
+  used_count INTEGER NOT NULL DEFAULT 0,
+  expires_at INTEGER,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
 `;
 
 type Arg = string | number | null;
@@ -123,7 +136,10 @@ function conn() {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       client = createClient({ url: `file:${file}` });
     }
-    const ready = client.executeMultiple(SCHEMA).then(() => seedAdmin(client));
+    const ready = client
+      .executeMultiple(SCHEMA)
+      .then(() => migrate(client))
+      .then(() => seedAdmin(client));
     g.__mandllabDb = { client, ready };
     ready.catch(() => {
       g.__mandllabDb = undefined; // 다음 요청에서 다시 시도
@@ -132,7 +148,23 @@ function conn() {
   return g.__mandllabDb;
 }
 
-// 관리자 테스트 계정: ADMIN_TEST_PASSWORD 가 있으면 아이디 'admin' 으로 강사 화면에 로그인할 수 있다.
+// 이미 만들어진 DB 에 새 칸을 더한다. 이미 있으면 그냥 넘어간다.
+const MIGRATIONS = [
+  "ALTER TABLE instructors ADD COLUMN role TEXT NOT NULL DEFAULT 'instructor'", // admin | instructor
+  "ALTER TABLE instructors ADD COLUMN status TEXT NOT NULL DEFAULT 'active'", // active | disabled
+  "ALTER TABLE instructors ADD COLUMN access_code_id TEXT",
+];
+
+async function migrate(client: Client) {
+  const cols = await client.execute("PRAGMA table_info(instructors)");
+  const have = new Set(cols.rows.map((r) => String(r.name)));
+  for (const sql of MIGRATIONS) {
+    const col = sql.match(/ADD COLUMN (\w+)/)![1];
+    if (!have.has(col)) await client.execute(sql);
+  }
+}
+
+// 메인 관리자 계정: ADMIN_TEST_PASSWORD 가 있으면 아이디 'admin' 으로 로그인한다.
 // 비밀번호는 코드에 두지 않고 환경 변수로만 받으며, 바꾸면 다음 서버 시작 때 반영된다.
 export const ADMIN_LOGIN_ID = "admin";
 
@@ -140,8 +172,9 @@ async function seedAdmin(client: Client) {
   const pw = process.env.ADMIN_TEST_PASSWORD;
   if (!pw) return;
   await client.execute({
-    sql: `INSERT INTO instructors (id, email, name, org, pw_hash, created_at) VALUES ('admin-test', ?, '관리자(테스트)', '만들랩', ?, ?)
-          ON CONFLICT(email) DO UPDATE SET pw_hash = excluded.pw_hash`,
+    sql: `INSERT INTO instructors (id, email, name, org, pw_hash, created_at, role, status)
+          VALUES ('admin-test', ?, '메인 관리자', '만들랩', ?, ?, 'admin', 'active')
+          ON CONFLICT(email) DO UPDATE SET pw_hash = excluded.pw_hash, role = 'admin', status = 'active'`,
     args: [ADMIN_LOGIN_ID, hashPassword(pw), Date.now()],
   });
 }

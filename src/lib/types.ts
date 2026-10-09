@@ -1,10 +1,24 @@
 export type SessionStatus = "active" | "ended" | "expired";
 
+export type InstructorRole = "admin" | "instructor";
+
 export interface Instructor {
   id: string;
   email: string;
   name: string;
   org: string;
+  role: InstructorRole;
+}
+
+export interface AccessCode {
+  id: string;
+  code: string;
+  label: string;
+  max_uses: number;
+  used_count: number;
+  expires_at: number | null;
+  active: number;
+  created_at: number;
 }
 
 export interface Session {
