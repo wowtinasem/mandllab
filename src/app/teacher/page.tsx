@@ -174,6 +174,23 @@ function SessionList({
   const [tab, setTab] = useState<"sessions" | "instructors">("sessions");
   const [onlyMine, setOnlyMine] = useState(false);
   const shown = sessions && (admin && onlyMine ? sessions.filter((s) => s.mine) : sessions);
+  const finished = (sessions ?? []).filter((s) => s.status !== "active" && (admin || s.mine)).length;
+
+  const removeSession = async (s: SessionRow) => {
+    const msg =
+      s.status === "active"
+        ? `"${s.title}"은(는) 아직 진행 중이에요. 지금 삭제하면 학생들이 바로 나가지고 결과물도 지워져요. 정말 삭제할까요?`
+        : `"${s.title}" 수업을 삭제할까요? 학생 결과물과 기록이 지워지고 목록에서 사라져요. 되돌릴 수 없어요.`;
+    if (!confirm(msg)) return;
+    await api(`/api/sessions/${s.id}`, { method: "DELETE" }).catch((e) => alert((e as Error).message));
+    load();
+  };
+
+  const removeFinished = async () => {
+    if (!confirm(`끝난 수업 ${finished}개를 모두 삭제할까요? 학생 결과물과 기록이 지워지고 되돌릴 수 없어요. 진행 중인 수업은 그대로 둬요.`)) return;
+    await api("/api/sessions/cleanup", { body: {} }).catch((e) => alert((e as Error).message));
+    load();
+  };
 
   const load = useCallback(() => api<{ sessions: SessionRow[] }>("/api/sessions").then((r) => setSessions(r.sessions)), []);
   useEffect(() => {
@@ -295,11 +312,18 @@ function SessionList({
         <div>
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-lg font-bold">{admin ? (onlyMine ? "내 수업" : "전체 수업") : "내 수업"}</h2>
-            {admin && (
-              <label className="flex items-center gap-1.5 text-sm text-muted">
-                <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />내가 만든 것만
-              </label>
-            )}
+            <div className="flex items-center gap-3">
+              {admin && (
+                <label className="flex items-center gap-1.5 text-sm text-muted">
+                  <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />내가 만든 것만
+                </label>
+              )}
+              {finished > 0 && (
+                <button className="text-sm font-semibold text-muted hover:text-danger" onClick={removeFinished}>
+                  🗑 끝난 수업 {finished}개 삭제
+                </button>
+              )}
+            </div>
           </div>
           {!shown ? (
             <p className="text-muted">불러오는 중…</p>
@@ -308,8 +332,11 @@ function SessionList({
           ) : (
             <ul className="space-y-2.5">
               {shown.map((s) => (
-                <li key={s.id}>
-                  <Link href={`/teacher/${s.id}`} className="card flex flex-wrap items-center gap-x-4 gap-y-1 p-4 transition hover:border-accent">
+                <li key={s.id} className="flex items-stretch gap-2">
+                  <Link
+                    href={`/teacher/${s.id}`}
+                    className="card flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 p-4 transition hover:border-accent"
+                  >
                     <span className="font-mono text-lg font-extrabold tracking-widest text-accent">{s.code}</span>
                     <span className="min-w-0 flex-1 font-semibold">{s.title}</span>
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_LABEL[s.status][1]}`}>
@@ -320,6 +347,16 @@ function SessionList({
                       {formatDateTime(s.created_at)} · {s.participantCount}명 · ${s.costUsd.toFixed(2)}
                     </span>
                   </Link>
+                  {(admin || s.mine) && (
+                    <button
+                      className="card shrink-0 px-3 text-muted transition hover:border-danger hover:text-danger"
+                      title="수업 삭제"
+                      aria-label={`${s.title} 수업 삭제`}
+                      onClick={() => removeSession(s)}
+                    >
+                      🗑
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

@@ -75,3 +75,21 @@ export async function POST(req: Request) {
   }
   return Response.json({ sent: recipients.map((r) => r.name) });
 }
+
+/**
+ * 메인 관리자: 메모 삭제
+ * - { all: true }  주고받은 메모 전체
+ * - { batchId }    내가 보낸 메모 한 건 (받은 강사 모두에게서 사라짐, 아직 안 읽은 팝업도 뜨지 않음)
+ * - { id }         받은 메시지 한 건
+ */
+export async function DELETE(req: Request) {
+  const admin = await currentAdmin();
+  if (!admin) return bad("메인 관리자만 지울 수 있어요.", 403);
+  const b = await readJson<{ all: boolean; batchId: string; id: string }>(req);
+  let r: { changes: number };
+  if (b.all === true) r = await db().prepare("DELETE FROM admin_messages").run();
+  else if (b.batchId) r = await db().prepare("DELETE FROM admin_messages WHERE batch_id = ? AND from_id = ?").run(str(b.batchId, 64), admin.id);
+  else if (b.id) r = await db().prepare("DELETE FROM admin_messages WHERE id = ? AND to_id = ?").run(str(b.id, 64), admin.id);
+  else return bad("지울 메모를 골라 주세요.");
+  return Response.json({ deleted: r.changes });
+}

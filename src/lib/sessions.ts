@@ -68,6 +68,12 @@ export async function expireSession(sessionId: string) {
   ]);
 }
 
+/** 수업 삭제: 학생·결과물·기록을 지우고 목록에서도 숨긴다. 같은 코드가 다시 발급되지 않도록 행과 사용량은 남긴다 */
+export async function deleteSession(sessionId: string) {
+  await expireSession(sessionId);
+  await db().prepare("UPDATE sessions SET deleted_at = ? WHERE id = ?").run(now(), sessionId);
+}
+
 export async function findSessionByCode(code: string): Promise<Session | null> {
   const row = await db().prepare("SELECT id FROM sessions WHERE code = ?").get(normalizeCode(code)) as
     | { id: string }

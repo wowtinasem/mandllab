@@ -1,7 +1,7 @@
 import { ownedSession } from "@/lib/auth";
 import { db, now } from "@/lib/db";
 import { bad, clampInt, readJson, str } from "@/lib/http";
-import { DOWNLOAD_GRACE_MS, addLog, classDeadline, expireSession, refreshSession } from "@/lib/sessions";
+import { DOWNLOAD_GRACE_MS, addLog, classDeadline, deleteSession, refreshSession } from "@/lib/sessions";
 import type { Participant } from "@/lib/types";
 
 const STUCK_IDLE_MS = 5 * 60_000;
@@ -166,6 +166,6 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/sessions/[id
   const { id } = await ctx.params;
   const owned = await ownedSession(id);
   if (!owned) return bad("세션을 찾을 수 없어요.", 404);
-  await expireSession(id);
+  await deleteSession(id);
   return Response.json({ ok: true });
 }

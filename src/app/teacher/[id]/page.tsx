@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import Preview from "@/components/Preview";
@@ -65,6 +66,7 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
   const [mission, setMission] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const router = useRouter();
   const [copiedLink, setCopiedLink] = useState(false);
 
   // QR 화면은 Esc 로 닫는다
@@ -201,7 +203,7 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
                   className="btn-danger"
                   onClick={() =>
                     confirm("수업을 영구 삭제할까요?\n코드는 즉시 무효가 되고, 참여자 결과물과 기록이 모두 지워져요. 되돌릴 수 없어요.") &&
-                    api(`/api/sessions/${id}`, { method: "DELETE" }).then(load)
+                    api(`/api/sessions/${id}`, { method: "DELETE" }).then(() => router.push("/teacher"))
                   }
                 >
                   🗑 삭제

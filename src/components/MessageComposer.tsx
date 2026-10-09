@@ -55,6 +55,16 @@ const MessageComposer = forwardRef<MessageComposerHandle, { people: Person[] }>(
     }
   };
   const unread = received.filter((m) => !m.read_at).length;
+
+  const remove = async (body: { all?: boolean; batchId?: string; id?: string }, ask: string) => {
+    if (!confirm(ask)) return;
+    try {
+      await api("/api/admin/messages", { method: "DELETE", body });
+      loadSent();
+    } catch (err) {
+      setNotice({ ok: false, text: (err as Error).message });
+    }
+  };
   useEffect(() => {
     // 마운트 시와 15초마다 확인 현황을 새로 고친다
     loadSent().catch(() => {});
@@ -150,7 +160,8 @@ const MessageComposer = forwardRef<MessageComposerHandle, { people: Person[] }>(
       </form>
 
       <div>
-        <div className="mb-3 flex gap-1 rounded-xl bg-surface-2 p-1 text-sm font-semibold sm:w-fit" role="tablist">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-xl bg-surface-2 p-1 text-sm font-semibold" role="tablist">
           <button
             role="tab"
             aria-selected={box === "received"}
@@ -168,6 +179,16 @@ const MessageComposer = forwardRef<MessageComposerHandle, { people: Person[] }>(
           >
             📤 보낸 메모
           </button>
+        </div>
+          {(sent.length > 0 || received.length > 0) && (
+            <button
+              type="button"
+              className="text-xs font-semibold text-muted hover:text-danger"
+              onClick={() => remove({ all: true }, "주고받은 메모를 모두 지울까요? 강사 화면에 아직 뜨지 않은 메모도 함께 사라져요. 되돌릴 수 없어요.")}
+            >
+              🗑 메모 모두 삭제
+            </button>
+          )}
         </div>
         {box === "sent" ? (
           sent.length === 0 ? (
@@ -187,6 +208,14 @@ const MessageComposer = forwardRef<MessageComposerHandle, { people: Person[] }>(
                     >
                       확인 {read}/{m.to.length}
                     </span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-muted hover:text-danger"
+                      title="이 메모 삭제"
+                      onClick={() => remove({ batchId: m.id }, "이 메모를 지울까요? 아직 확인하지 않은 강사에게도 더 이상 뜨지 않아요.")}
+                    >
+                      삭제
+                    </button>
                   </div>
                   <div className="mt-2 text-xs text-muted">
                     {formatDateTime(m.created_at)} ·{" "}
@@ -232,6 +261,14 @@ const MessageComposer = forwardRef<MessageComposerHandle, { people: Person[] }>(
                       ↩ 답장
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="shrink-0 text-xs text-muted hover:text-danger"
+                    title="이 메시지 삭제"
+                    onClick={() => remove({ id: m.id }, "이 메시지를 지울까요?")}
+                  >
+                    삭제
+                  </button>
                 </div>
                 <div className="mt-2 text-xs text-muted">{formatDateTime(m.created_at)}</div>
                 {replyId === m.id && (

@@ -9,8 +9,10 @@ export async function GET() {
   // 메인 관리자는 모든 강사의 수업을, 강사는 자기가 만든 수업만 본다
   const ids = (
     me.role === "admin"
-      ? await db().prepare("SELECT id FROM sessions ORDER BY created_at DESC LIMIT 300").all()
-      : await db().prepare("SELECT id FROM sessions WHERE instructor_id = ? ORDER BY created_at DESC LIMIT 100").all(me.id)
+      ? await db().prepare("SELECT id FROM sessions WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 300").all()
+      : await db()
+          .prepare("SELECT id FROM sessions WHERE instructor_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 100")
+          .all(me.id)
   ) as { id: string }[];
   const names = new Map(
     ((await db().prepare("SELECT id, name FROM instructors").all()) as { id: string; name: string }[]).map((r) => [r.id, r.name]),
