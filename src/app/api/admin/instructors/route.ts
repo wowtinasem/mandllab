@@ -2,6 +2,7 @@ import { currentAdmin, newId } from "@/lib/auth";
 import { db, now } from "@/lib/db";
 import { bad, readJson, str } from "@/lib/http";
 import { formatPhone, normalizePhone } from "@/lib/phone";
+import { ONLINE_WINDOW_MS } from "@/lib/messages";
 
 /**
  * 메인 관리자: 허용 강사 명단 + 가입 상태 + 수업 수.
@@ -12,7 +13,7 @@ export async function GET() {
   const allowed = await db()
     .prepare(
       `SELECT a.id, a.name, a.phone, a.org, a.memo, a.active, a.created_at, a.instructor_id,
-              i.email, i.created_at AS joined_at,
+              i.email, i.created_at AS joined_at, i.last_seen, i.status AS account_status,
               (SELECT COUNT(*) FROM sessions s WHERE s.instructor_id = a.instructor_id) AS session_count,
               (SELECT COUNT(*) FROM sessions s WHERE s.instructor_id = a.instructor_id AND s.status = 'active') AS active_count
        FROM allowed_instructors a LEFT JOIN instructors i ON i.id = a.instructor_id
@@ -28,8 +29,13 @@ export async function GET() {
        ORDER BY i.created_at DESC`,
     )
     .all();
+  const t = now();
   return Response.json({
-    allowed: (allowed as { phone: string }[]).map((a) => ({ ...a, phoneText: formatPhone(a.phone) })),
+    allowed: (allowed as { phone: string; last_seen: number | null }[]).map((a) => ({
+      ...a,
+      phoneText: formatPhone(a.phone),
+      online: a.last_seen !== null && t - a.last_seen < ONLINE_WINDOW_MS,
+    })),
     legacy,
   });
 }

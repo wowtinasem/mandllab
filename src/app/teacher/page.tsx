@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import AdminPanel from "@/components/AdminPanel";
+import MessagePopup from "@/components/MessagePopup";
 import { api, formatDateTime } from "@/lib/client";
 import type { Instructor, Session } from "@/lib/types";
 import { formatPhoneInput } from "@/lib/phone";
@@ -195,6 +196,7 @@ function SessionList({
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <MessagePopup />
       <header className="flex items-center justify-between">
         <Logo href="/teacher" />
         <div className="flex items-center gap-3 text-sm">

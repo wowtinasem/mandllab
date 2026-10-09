@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import Preview from "@/components/Preview";
+import MessagePopup from "@/components/MessagePopup";
 import { api, formatDateTime, timeAgo } from "@/lib/client";
 import type { Session } from "@/lib/types";
 
@@ -114,6 +115,7 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
 
   return (
     <div className="min-h-screen">
+      <MessagePopup />
       <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
           <Logo href="/teacher" />

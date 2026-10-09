@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
+import MessagePopup from "@/components/MessagePopup";
 import { api } from "@/lib/client";
 import type { Instructor } from "@/lib/types";
 
@@ -89,6 +90,7 @@ export default function TeacherGuide() {
 
   return (
     <div className="min-h-screen">
+      <MessagePopup />
       <header className="sticky top-0 z-30 h-[65px] border-b border-line bg-surface/95 backdrop-blur print:hidden">
         <div className="flex h-full items-center gap-3 px-4">
           <button

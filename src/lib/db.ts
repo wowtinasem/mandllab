@@ -104,6 +104,18 @@ CREATE TABLE IF NOT EXISTS usage (
 );
 CREATE INDEX IF NOT EXISTS usage_session ON usage(session_id);
 
+-- 메인 관리자가 강사에게 보내는 메모. 받는 강사마다 한 줄씩 저장하고, 강사가 확인하면 read_at 을 채운다
+CREATE TABLE IF NOT EXISTS admin_messages (
+  id TEXT PRIMARY KEY,
+  batch_id TEXT NOT NULL,              -- 한 번에 여러 명에게 보낸 묶음
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  read_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS admin_messages_to ON admin_messages(to_id, read_at);
+
 -- 허용 강사 명단: 메인 관리자가 이름과 전화번호를 미리 등록해 둔다.
 -- 강사가 가입할 때 이름·전화번호가 이 명단과 맞아야 계정이 만들어진다.
 CREATE TABLE IF NOT EXISTS allowed_instructors (
@@ -154,6 +166,7 @@ const MIGRATIONS = [
   "ALTER TABLE instructors ADD COLUMN status TEXT NOT NULL DEFAULT 'active'", // active | disabled
   "ALTER TABLE instructors ADD COLUMN access_code_id TEXT",
   "ALTER TABLE instructors ADD COLUMN phone TEXT",
+  "ALTER TABLE instructors ADD COLUMN last_seen INTEGER", // 강사 화면이 마지막으로 열려 있던 시각 (접속 중 표시용)
 ];
 
 async function migrate(client: Client) {

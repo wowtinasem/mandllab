@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, formatDateTime } from "@/lib/client";
 import { formatPhoneInput, normalizePhone } from "@/lib/phone";
+import MessageComposer, { type MessageComposerHandle } from "./MessageComposer";
 
 type AllowedRow = {
   id: string;
@@ -18,6 +19,9 @@ type AllowedRow = {
   joined_at: number | null;
   session_count: number;
   active_count: number;
+  last_seen: number | null;
+  account_status: string | null;
+  online: boolean;
 };
 type LegacyRow = { id: string; name: string; email: string; org: string; status: string; created_at: number; session_count: number };
 
@@ -48,6 +52,7 @@ export default function AdminPanel() {
   const [result, setResult] = useState<{ added: string[]; failed: { line: string; reason: string }[] } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const composer = useRef<MessageComposerHandle>(null);
 
   const load = useCallback(async () => {
     const r = await api<{ allowed: AllowedRow[]; legacy: LegacyRow[] }>("/api/admin/instructors");
@@ -58,6 +63,8 @@ export default function AdminPanel() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 마운트 시 서버 목록을 불러온다
     load().catch((e) => setError((e as Error).message));
+    const t = setInterval(() => load().catch(() => {}), 15_000);
+    return () => clearInterval(t);
   }, [load]);
 
   const register = async (items: { name: string; phone: string; org?: string; memo?: string }[]) => {
@@ -85,10 +92,16 @@ export default function AdminPanel() {
     `[만들랩 강사 가입 안내]\n1) ${window.location.origin}/teacher 에 접속\n2) "처음이신가요? 강사 가입" 을 누르고\n3) 등록된 이름, 전화번호와 사용할 이메일을 입력하면 가입이 끝나요.\n다음부터는 이름과 전화번호로 바로 로그인할 수 있어요.`;
 
   const joined = allowed?.filter((a) => a.instructor_id).length ?? 0;
+  // 메모를 받을 수 있는 강사: 가입을 마쳤고 사용 중
+  const people = (allowed ?? [])
+    .filter((a) => a.instructor_id && a.active && a.account_status === "active")
+    .map((a) => ({ instructorId: a.instructor_id!, name: a.name, online: a.online, teaching: a.active_count > 0 }));
 
   return (
     <div className="space-y-6">
       {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+
+      <MessageComposer ref={composer} people={people} />
 
       <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
         <div className="card h-fit space-y-4 p-5">
@@ -232,9 +245,17 @@ export default function AdminPanel() {
                       <td className="px-4 py-2.5 font-semibold">
                         {a.name}
                         {!a.active && <span className="ml-1.5 rounded bg-danger-soft px-1.5 py-0.5 text-[11px] font-bold text-danger">중지됨</span>}
+                        {a.active && a.online && (
+                          <span className="ml-1.5 whitespace-nowrap rounded bg-ok-soft px-1.5 py-0.5 text-[11px] font-bold text-ok" title="지금 강사 화면을 보고 있어요">
+                            🟢 접속 중
+                          </span>
+                        )}
+                        {a.active && a.active_count > 0 && (
+                          <span className="ml-1.5 whitespace-nowrap rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-bold text-accent">수업 중</span>
+                        )}
                         {a.org && <div className="text-xs font-normal text-muted">{a.org}</div>}
                       </td>
-                      <td className="px-2 py-2.5 font-mono text-[13px]">{a.phoneText}</td>
+                      <td className="whitespace-nowrap px-2 py-2.5 font-mono text-[13px]">{a.phoneText}</td>
                       <td className="px-2 py-2.5 text-xs">
                         {a.instructor_id ? (
                           <>
@@ -250,6 +271,17 @@ export default function AdminPanel() {
                         {a.active_count > 0 && <span className="text-xs text-ok"> (진행 {a.active_count})</span>}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right text-xs font-semibold">
+                        {a.instructor_id && a.active && (
+                          <button
+                            className="mr-3 text-accent hover:underline"
+                            onClick={() => {
+                              composer.current?.pick(a.instructor_id!);
+                              document.getElementById("message-composer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            }}
+                          >
+                            ✉ 메모
+                          </button>
+                        )}
                         <button
                           className={a.active ? "text-danger hover:underline" : "text-accent hover:underline"}
                           onClick={() => {
