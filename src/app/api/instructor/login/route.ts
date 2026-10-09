@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { clientIp, joinRateLimited, recordFailedAttempt, startInstructorSession, verifyPassword } from "@/lib/auth";
 import { bad, readJson, str } from "@/lib/http";
-import { normalizeName, normalizePhone } from "@/lib/phone";
+import { PHONE_HINT, normalizeName, normalizePhone } from "@/lib/phone";
 
 /**
  * 로그인 두 가지
@@ -15,6 +15,7 @@ export async function POST(req: Request) {
 
   if (b.phone !== undefined) {
     const phone = normalizePhone(str(b.phone, 30));
+    if (!phone) return bad(PHONE_HINT);
     const row = phone
       ? ((await db()
           .prepare(

@@ -1,7 +1,7 @@
 import { db, now } from "@/lib/db";
 import { clientIp, joinRateLimited, newId, recordFailedAttempt, startInstructorSession } from "@/lib/auth";
 import { bad, readJson, str } from "@/lib/http";
-import { normalizeName, normalizePhone } from "@/lib/phone";
+import { PHONE_HINT, normalizeName, normalizePhone } from "@/lib/phone";
 import type { AllowedInstructor } from "@/lib/types";
 
 /**
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   const phone = normalizePhone(str(b.phone, 30));
   const email = str(b.email, 120).toLowerCase();
   if (!name) return bad("강사 이름을 입력해 주세요.");
-  if (!phone) return bad("전화번호를 확인해 주세요. 예: 010-1234-5678");
+  if (!phone) return bad(PHONE_HINT);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad("이메일 형식을 확인해 주세요.");
 
   const allowed = (await db().prepare("SELECT * FROM allowed_instructors WHERE phone = ?").get(phone)) as AllowedInstructor | undefined;

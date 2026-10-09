@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       continue;
     }
     if (!phone) {
-      failed.push({ line, reason: "전화번호 형식이 아니에요" });
+      failed.push({ line, reason: "010-0000-0000 형식의 휴대폰 번호가 아니에요" });
       continue;
     }
     if (await db().prepare("SELECT 1 FROM allowed_instructors WHERE phone = ?").get(phone)) {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, formatDateTime } from "@/lib/client";
+import { formatPhoneInput, normalizePhone } from "@/lib/phone";
 
 type AllowedRow = {
   id: string;
@@ -120,9 +121,10 @@ export default function AdminPanel() {
                   id="a-phone"
                   className="input"
                   inputMode="tel"
-                  placeholder="010-1234-5678"
+                  placeholder="010-0000-0000"
+                  maxLength={13}
                   value={one.phone}
-                  onChange={(e) => setOne({ ...one, phone: e.target.value })}
+                  onChange={(e) => setOne({ ...one, phone: formatPhoneInput(e.target.value) })}
                 />
               </div>
               <div>
@@ -131,7 +133,7 @@ export default function AdminPanel() {
                 </label>
                 <input id="a-org" className="input" placeholder="예: 만들대학교" value={one.org} onChange={(e) => setOne({ ...one, org: e.target.value })} />
               </div>
-              <button className="btn-primary w-full py-3" disabled={!one.name.trim() || !one.phone.trim()}>
+              <button className="btn-primary w-full py-3" disabled={!one.name.trim() || !normalizePhone(one.phone)}>
                 명단에 등록
               </button>
             </form>
@@ -154,6 +156,16 @@ export default function AdminPanel() {
                 onChange={(e) => setBulk(e.target.value)}
               />
               <p className="text-xs text-muted">이름, 전화번호, 소속(선택) 순서로 쉼표나 탭으로 구분해요. 엑셀에서 복사해 붙여 넣어도 돼요.</p>
+              {bulk.trim() && (
+                <ul className="max-h-40 space-y-0.5 overflow-y-auto rounded-xl bg-surface-2 p-2.5 text-xs">
+                  {parseLines(bulk).map((r, i) => (
+                    <li key={i} className={normalizePhone(r.phone) ? "" : "text-danger"}>
+                      {r.name} · {normalizePhone(r.phone) ? formatPhoneInput(r.phone) : `${r.phone || "번호 없음"} (010-0000-0000 형식이 아니에요)`}
+                      {r.org ? ` · ${r.org}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <button className="btn-primary w-full py-3" disabled={!bulk.trim()}>
                 {parseLines(bulk).length || ""}명 등록
               </button>

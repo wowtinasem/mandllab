@@ -7,6 +7,7 @@ import Logo from "@/components/Logo";
 import AdminPanel from "@/components/AdminPanel";
 import { api, formatDateTime } from "@/lib/client";
 import type { Instructor, Session } from "@/lib/types";
+import { formatPhoneInput } from "@/lib/phone";
 
 type SessionRow = Session & { participantCount: number; costUsd: number; instructorName: string; mine: boolean };
 type MeResp = { instructor: Instructor | null; mockMode: boolean; dbMissing: boolean };
@@ -59,7 +60,8 @@ function AuthForm({ onDone }: { onDone: () => void }) {
       : mode === "admin"
         ? "메인 관리자 아이디와 비밀번호로 로그인해요."
         : "가입한 강사는 이름과 전화번호만으로 들어올 수 있어요.";
-  const ready = mode === "admin" ? f.id.trim() && f.password : f.name.trim() && f.phone.trim() && (mode === "login" || f.email.trim());
+  // 전화번호는 010-0000-0000 (13자)까지 다 입력해야 버튼이 켜진다
+  const ready = mode === "admin" ? f.id.trim() && f.password : f.name.trim() && f.phone.length === 13 && (mode === "login" || f.email.trim());
 
   return (
     <main className="mx-auto max-w-md px-4 py-8">
@@ -77,7 +79,15 @@ function AuthForm({ onDone }: { onDone: () => void }) {
         ) : (
           <>
             <Field id="name" label="강사 이름" value={f.name} onChange={set("name")} />
-            <Field id="phone" label="전화번호" type="tel" placeholder="010-1234-5678" value={f.phone} onChange={set("phone")} />
+            <Field
+              id="phone"
+              label="전화번호"
+              type="tel"
+              placeholder="010-0000-0000"
+              maxLength={13}
+              value={f.phone}
+              onChange={(e) => setF({ ...f, phone: formatPhoneInput(e.target.value) })}
+            />
             {mode === "signup" && <Field id="email" label="이메일" type="email" placeholder="연락받을 이메일" value={f.email} onChange={set("email")} />}
           </>
         )}
@@ -114,6 +124,7 @@ function Field(props: {
   value: string;
   type?: string;
   placeholder?: string;
+  maxLength?: number;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
@@ -127,6 +138,7 @@ function Field(props: {
         type={props.type ?? "text"}
         inputMode={props.type === "tel" ? "tel" : undefined}
         placeholder={props.placeholder}
+        maxLength={props.maxLength}
         value={props.value}
         onChange={props.onChange}
       />
