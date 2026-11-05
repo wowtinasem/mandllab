@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import AdminPanel from "@/components/AdminPanel";
 import MessagePopup from "@/components/MessagePopup";
+import RetentionPopup from "@/components/RetentionPopup";
 import AskAdminButton from "@/components/AskAdminButton";
 import { api, formatDateTime } from "@/lib/client";
 import type { Instructor, Session } from "@/lib/types";
@@ -215,6 +216,7 @@ function SessionList({
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
       <MessagePopup />
+      {admin && <RetentionPopup />}
       <header className="flex items-center justify-between">
         <Logo href="/teacher" />
         <div className="flex items-center gap-3 text-sm">
@@ -301,7 +303,7 @@ function SessionList({
             <NumField id="dur" label="진행 시간 (분, 최대 240)" value={form.durationMin} onChange={num("durationMin")} max={240} />
           </div>
           <p className="text-xs text-muted">
-            수업은 최대 4시간이에요. 진행 시간이 지나면 자동으로 종료되고, 학생은 종료 뒤 7일 동안 결과물을 내려받을 수 있어요. 코드는 다시 발급되지 않아요.
+            수업은 최대 4시간이에요. 진행 시간이 지나면 자동으로 종료돼요. 결과물은 자동으로 지우지 않고, 종료 30일 뒤 메인 관리자에게 삭제 여부를 물어요. 코드는 다시 발급되지 않아요.
           </p>
           {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
           <button className="btn-primary w-full py-3" disabled={creating || !form.title.trim()}>

@@ -1,7 +1,7 @@
 import { ownedSession } from "@/lib/auth";
 import { db, now } from "@/lib/db";
 import { bad, clampInt, readJson, str } from "@/lib/http";
-import { DOWNLOAD_GRACE_MS, addLog, classDeadline, deleteSession, refreshSession } from "@/lib/sessions";
+import { addLog, classDeadline, deleteSession, refreshSession } from "@/lib/sessions";
 import type { Participant } from "@/lib/types";
 
 const STUCK_IDLE_MS = 5 * 60_000;
@@ -59,7 +59,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/sessions/[id]">
     gallery,
     usage,
     serverNow: t,
-    expiresAt: session.status === "ended" && session.ended_at ? session.ended_at + DOWNLOAD_GRACE_MS : null,
+    expiresAt: null,
   });
 }
 
@@ -108,9 +108,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/sessions/[id]"
         // 예정 종료 시각이 지났으면 1시간 연장해서 다시 연다
         // 다시 열 때도 수업을 만든 뒤 4시간을 넘길 수 없다
         const deadline = classDeadline(session.created_at);
-        if (deadline <= t) return bad("수업 시간(최대 4시간)이 지나서 다시 열 수 없어요. 학생은 7일 동안 결과물을 내려받을 수 있어요.", 409);
+        if (deadline <= t) return bad("수업 시간(최대 4시간)이 지나서 다시 열 수 없어요. 학생은 결과물을 계속 내려받을 수 있어요.", 409);
         const endsAt = Math.min(session.ends_at && session.ends_at > t ? session.ends_at : t + 60 * 60_000, deadline);
-        await set("status = 'active', ended_at = NULL, ends_at = ?", endsAt);
+        await set("status = 'active', ended_at = NULL, ends_at = ?, review_at = NULL", endsAt);
       }
       break;
     case "lock":

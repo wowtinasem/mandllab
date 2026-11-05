@@ -6,7 +6,11 @@ import type { Session } from "./types";
 // 헷갈리는 글자(0/O, 1/I/L)를 뺀 32자. 6자리면 약 10억 가지.
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
-export const DOWNLOAD_GRACE_MS = 7 * 24 * 3600 * 1000;
+/**
+ * 학생 결과물은 자동으로 지우지 않는다. 수업이 끝나고 30일이 지나면 메인 관리자에게 삭제 여부를 묻고,
+ * 답하지 않으면 30일 뒤 다시 묻는다. 지우는 것은 언제나 메인 관리자(또는 수업을 만든 강사)의 결정이다.
+ */
+export const REVIEW_AFTER_MS = 30 * 24 * 3600 * 1000;
 
 /** 수업 한 번은 최대 4시간. 수업을 만든 시각부터 셈하며, 그 안에서는 강사가 자유롭게 진행·연장한다 */
 export const MAX_CLASS_MIN = 240;
@@ -40,7 +44,7 @@ export function normalizeCode(input: string): string {
 /**
  * 시간에 따른 상태 전환을 반영한 세션을 돌려준다.
  * - 진행 중인데 예정 종료 시각이 지났으면 종료
- * - 종료 후 7일이 지나면 만료: 참여자·결과물·기록 영구 삭제, 세션 행과 사용량은 정산용으로 남김
+ * 끝난 수업의 결과물은 메인 관리자가 지우기 전까지 그대로 둔다 (자동 삭제 없음)
  */
 export async function refreshSession(sessionId: string): Promise<Session | null> {
   const s = await db().prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as Session | undefined;
@@ -50,10 +54,6 @@ export async function refreshSession(sessionId: string): Promise<Session | null>
     await db().prepare("UPDATE sessions SET status = 'ended', ended_at = ? WHERE id = ?").run(s.ends_at, s.id);
     s.status = "ended";
     s.ended_at = s.ends_at;
-  }
-  if (s.status === "ended" && s.ended_at && s.ended_at + DOWNLOAD_GRACE_MS <= t) {
-    await expireSession(s.id);
-    s.status = "expired";
   }
   return s;
 }

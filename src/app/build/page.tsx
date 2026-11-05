@@ -8,7 +8,7 @@ import Preview from "@/components/Preview";
 import ThemePicker from "@/components/ThemePicker";
 import { SplitHandle, useResizable } from "@/components/useResizable";
 import { PlanQuestionCard, PlanSpecCard, toPlanHistory, type PlanTurn } from "@/components/PlanCards";
-import { ApiError, api, formatDateTime, streamGenerate } from "@/lib/client";
+import { ApiError, api, streamGenerate } from "@/lib/client";
 import { HINTS, STARTERS } from "@/lib/starters";
 import type { VersionMeta } from "@/lib/types";
 
@@ -290,7 +290,7 @@ export default function Builder() {
       )}
       {!active && (
         <div className="border-b border-line bg-warn-soft px-4 py-2 text-sm text-warn">
-          수업이 끝났어요. 결과물은 {me.session.expiresAt ? `${formatDateTime(me.session.expiresAt)}까지` : "당분간"} 내려받을 수 있어요.
+          수업이 끝났어요. 지금 만든 앱은 계속 내려받을 수 있어요. 필요한 버전은 ⬇ 다운로드로 꼭 저장해 두세요.
         </div>
       )}
 
@@ -883,7 +883,7 @@ function DownloadDialog({ versions, initialId, onClose }: { versions: VersionMet
           </a>
         </div>
         <p className="mt-4 text-center text-xs text-muted">
-          수업이 끝나도 7일 동안은{" "}
+          수업이 끝난 뒤에도{" "}
           <Link href="/" className="underline">
             복귀 코드
           </Link>

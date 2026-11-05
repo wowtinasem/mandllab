@@ -169,6 +169,8 @@ const MIGRATIONS = [
   "ALTER TABLE instructors ADD COLUMN last_seen INTEGER", // 강사 화면이 마지막으로 열려 있던 시각 (접속 중 표시용)
   "ALTER TABLE admin_messages ADD COLUMN reply_to TEXT", // 답장이면 원래 메시지 id
   "ALTER TABLE sessions ADD COLUMN deleted_at INTEGER", // 목록에서 지운 수업 (코드 재발급을 막으려고 행은 남긴다)
+  "ALTER TABLE sessions ADD COLUMN review_at INTEGER", // 메인 관리자에게 삭제 여부를 다시 물을 시각 (없으면 종료 30일 뒤)
+  "ALTER TABLE sessions ADD COLUMN keep_forever INTEGER NOT NULL DEFAULT 0", // 1 이면 계속 보관, 다시 묻지 않음
 ];
 
 async function migrate(client: Client) {

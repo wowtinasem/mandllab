@@ -1,7 +1,6 @@
 import { currentParticipant } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bad } from "@/lib/http";
-import { DOWNLOAD_GRACE_MS } from "@/lib/sessions";
 import { isMockMode } from "@/lib/ai";
 
 /** 참여자 화면이 몇 초마다 읽는 상태: 수업 상태, 미션, 남은 횟수, 내 버전 목록 */
@@ -27,7 +26,7 @@ export async function GET() {
       paused: Boolean(s.paused),
       mission: s.mission,
       endsAt: s.ends_at,
-      expiresAt: s.status === "ended" && s.ended_at ? s.ended_at + DOWNLOAD_GRACE_MS : null,
+      expiresAt: null,
     },
     mockMode: isMockMode(),
   });

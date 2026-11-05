@@ -8,7 +8,7 @@ import Preview from "@/components/Preview";
 import QrCode, { joinUrl } from "@/components/QrCode";
 import MessagePopup from "@/components/MessagePopup";
 import AskAdminButton from "@/components/AskAdminButton";
-import { api, formatDateTime, timeAgo } from "@/lib/client";
+import { api, timeAgo } from "@/lib/client";
 import type { Session } from "@/lib/types";
 
 type Row = {
@@ -142,7 +142,7 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
                   ? `진행 중 · ${minutesLeft}분 뒤 자동 종료`
                   : "진행 중"
                 : s.status === "ended"
-                  ? `종료됨 · ${d.expiresAt ? formatDateTime(d.expiresAt) + "에 결과물 삭제" : ""}`
+                  ? "종료됨 · 결과물은 삭제하기 전까지 보관돼요"
                   : "만료·삭제됨"}
             </div>
           </div>
@@ -195,9 +195,14 @@ export default function Dashboard({ params }: { params: Promise<{ id: string }> 
                 <a className="btn-ghost" href={`/api/sessions/${id}/report`}>
                   📄 사용량 보고서
                 </a>
+                {d.participants.some((p) => p.version_count > 0) && (
+                  <a className="btn-ghost" href={`/api/sessions/${id}/apps-zip`} title="모든 학생의 최신 앱을 한 번에 내려받아요 (갤러리에 올리지 않은 앱 포함)">
+                    🗂 학생 앱 전체 ZIP
+                  </a>
+                )}
                 {d.gallery.length > 0 && (
                   <a className="btn-ghost" href={`/api/sessions/${id}/gallery-zip`}>
-                    🗂 갤러리 ZIP
+                    🖼 갤러리 ZIP
                   </a>
                 )}
                 <button
